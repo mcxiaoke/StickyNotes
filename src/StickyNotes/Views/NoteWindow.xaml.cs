@@ -14,6 +14,7 @@ public partial class NoteWindow : Window
 {
     public NoteViewModel ViewModel => (NoteViewModel)DataContext;
     public TextBox Editor => EditorTextBox;
+    public System.Windows.Controls.Primitives.Popup MoreMenu => MoreMenuPopup;
 
     public NoteWindow(NoteViewModel viewModel)
     {
@@ -93,34 +94,83 @@ public partial class NoteWindow : Window
         }
     }
 
-    private void ColorPaletteButton_Click(object sender, RoutedEventArgs e)
+    private void MoreMenuButton_Click(object sender, RoutedEventArgs e)
     {
-        ColorPopup.IsOpen = !ColorPopup.IsOpen;
+        MoreMenuPopup.IsOpen = !MoreMenuPopup.IsOpen;
+    }
+
+    private void ShowNotesList_Click(object sender, RoutedEventArgs e)
+    {
+        MoreMenuPopup.IsOpen = false;
+        var mainWindow = Application.Current?.MainWindow;
+        if (mainWindow != null)
+        {
+            if (mainWindow.WindowState == WindowState.Minimized)
+                mainWindow.WindowState = WindowState.Normal;
+            mainWindow.Activate();
+        }
     }
 
     private async void ColorSelected_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is NoteColor color)
         {
-            ColorPopup.IsOpen = false;
+            MoreMenuPopup.IsOpen = false;
             await ViewModel.SetColorAsync(color);
+        }
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            if (e.Key == Key.N)
+            {
+                NewNoteButton_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.W)
+            {
+                Close();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.D)
+            {
+                DeleteButton_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.H)
+            {
+                ShowNotesList_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.P)
+            {
+                ViewModel.TogglePinCommand.Execute(null);
+                e.Handled = true;
+            }
         }
     }
 
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
-        var result = MessageBox.Show(
-            "确定要删除这条便签吗？",
-            "删除确认",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question
-        );
-
-        if (result == MessageBoxResult.Yes)
+        // 若便签无任何实质内容，直接删除无需弹出二次确认弹窗
+        if (!string.IsNullOrWhiteSpace(ViewModel.Content))
         {
-            await ViewModel.DeleteAsync();
-            Close();
+            var result = MessageBox.Show(
+                "确定要删除这条便签吗？",
+                "删除确认",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question
+            );
+
+            if (result != MessageBoxResult.Yes)
+                return;
         }
+
+        await ViewModel.DeleteAsync();
+        Close();
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

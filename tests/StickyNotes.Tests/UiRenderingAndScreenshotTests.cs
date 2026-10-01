@@ -280,4 +280,54 @@ public class UiRenderingAndScreenshotTests
             coordinator.Dispose();
         });
     }
+
+    [TestMethod]
+    public void Render_NoteWindow_Purple_Theme_SavesSnapshot()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var coordinator = new AutoSaveCoordinator();
+            var vm = new NoteViewModel(repo, coordinator);
+
+            var note = new Note
+            {
+                Id = Guid.NewGuid(),
+                Content = "梦幻紫主题便签\n\n已成功切换至梦幻紫柔和色系。\n整张便签背景从顶部到底部全色系融合，无任何白色遮挡。",
+                Color = NoteColor.Purple,
+                IsPinned = false
+            };
+            vm.Initialize(note);
+
+            var win = new NoteWindow(vm);
+
+            Assert.AreEqual(NoteColor.Purple, win.ViewModel.Color);
+
+            TestEnvironment.SaveWindowSnapshot(win, 340, 380, "06_NoteWindow_Purple_Theme.png");
+            coordinator.Dispose();
+        });
+    }
+
+    [TestMethod]
+    public void NotesList_TogglePinCommand_UpdatesNoteAndSorting()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var note1 = new Note { Id = Guid.NewGuid(), Content = "普通便签 A", IsPinned = false, UpdatedAt = DateTime.UtcNow.AddMinutes(-10) };
+            var note2 = new Note { Id = Guid.NewGuid(), Content = "普通便签 B", IsPinned = false, UpdatedAt = DateTime.UtcNow.AddMinutes(-5) };
+            var repo = new FakeNoteRepository { Notes = { note1, note2 } };
+            var searchService = new SearchService();
+            var windowManager = new WindowManager(null!, repo);
+            var vm = new NotesListViewModel(repo, searchService, windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(2, vm.Notes.Count);
+            Assert.IsFalse(vm.Notes[1].IsPinned);
+
+            // 触发置顶操作
+            vm.TogglePinNoteCommand.Execute(note1);
+
+            Assert.IsTrue(note1.IsPinned);
+        });
+    }
 }
