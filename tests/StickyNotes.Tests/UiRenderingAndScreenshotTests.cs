@@ -330,4 +330,35 @@ public class UiRenderingAndScreenshotTests
             Assert.IsTrue(note1.IsPinned);
         });
     }
+
+    [TestMethod]
+    public void Render_NoteWindow_ColorPicker_SavesSnapshot()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var coordinator = new AutoSaveCoordinator();
+            var vm = new NoteViewModel(repo, coordinator);
+
+            var note = new Note
+            {
+                Id = Guid.NewGuid(),
+                Content = "调色盘主题色彩测试",
+                Color = NoteColor.Pink,
+                IsPinned = false
+            };
+            vm.Initialize(note);
+
+            var win = new NoteWindow(vm);
+
+            // 提取 MoreMenuPopup.Child (即带 7 色调色盘与操作菜单的 Fluent Border)
+            if (win.MoreMenu.Child is FrameworkElement popupContent)
+            {
+                popupContent.DataContext = vm;
+                TestEnvironment.SaveElementSnapshot(popupContent, 250, 220, "07_NoteWindow_ColorPicker.png");
+            }
+
+            coordinator.Dispose();
+        });
+    }
 }

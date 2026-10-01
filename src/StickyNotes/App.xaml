@@ -10,8 +10,8 @@
                 <ResourceDictionary Source="pack://application:,,,/Wpf.Ui;component/Resources/Wpf.Ui.xaml" />
 
                 <!-- 本地设计变量与便签主题色 -->
-                <ResourceDictionary Source="Resources/DesignTokens.xaml" />
                 <ResourceDictionary Source="Resources/StickyColors.xaml" />
+                <ResourceDictionary Source="Resources/DesignTokens.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

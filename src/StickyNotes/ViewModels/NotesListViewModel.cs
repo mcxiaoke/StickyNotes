@@ -23,6 +23,17 @@ public partial class NotesListViewModel : ObservableObject
     private ObservableCollection<Note> _notes = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredNotes))]
+    private int _selectedFilterIndex = 0; // 0: 全部, 1: 已置顶
+
+    public IEnumerable<Note> FilteredNotes =>
+        SelectedFilterIndex == 1
+            ? Notes.Where(n => n.IsPinned)
+            : Notes;
+
+    public int PinnedNotesCount => Notes.Count(n => n.IsPinned);
+
+    [ObservableProperty]
     private string _searchText = string.Empty;
 
     [ObservableProperty]
@@ -64,6 +75,8 @@ public partial class NotesListViewModel : ObservableObject
             Notes.Add(note);
         }
         HasNoNotes = Notes.Count == 0;
+        OnPropertyChanged(nameof(FilteredNotes));
+        OnPropertyChanged(nameof(PinnedNotesCount));
     }
 
     partial void OnSearchTextChanged(string value)
@@ -123,6 +136,7 @@ public partial class NotesListViewModel : ObservableObject
         await _repository.SaveAsync(newNote);
         Notes.Insert(0, newNote);
         HasNoNotes = false;
+        RefreshFilterNotification();
 
         // 立即唤起独立贴纸窗口并聚焦
         _windowManager.OpenOrActivateNote(newNote);
@@ -150,6 +164,7 @@ public partial class NotesListViewModel : ObservableObject
         await _repository.SoftDeleteAsync(note.Id);
         Notes.Remove(note);
         HasNoNotes = Notes.Count == 0;
+        RefreshFilterNotification();
 
         // 重新同步搜索状态
         if (IsSearching)
@@ -162,6 +177,12 @@ public partial class NotesListViewModel : ObservableObject
     public void SelectSearchHit(SearchHit hit)
     {
         _windowManager.NavigateToHit(hit);
+    }
+
+    private void RefreshFilterNotification()
+    {
+        OnPropertyChanged(nameof(FilteredNotes));
+        OnPropertyChanged(nameof(PinnedNotesCount));
     }
 
     private void HandleNoteUpdated(Note updated)
@@ -184,6 +205,8 @@ public partial class NotesListViewModel : ObservableObject
                 Notes.Insert(insertPos, updated);
             }
 
+            RefreshFilterNotification();
+
             if (IsSearching)
             {
                 OnSearchTextChanged(SearchText);
@@ -201,6 +224,7 @@ public partial class NotesListViewModel : ObservableObject
             {
                 Notes.Remove(note);
             }
+            RefreshFilterNotification();
             if (IsSearching)
             {
                 OnSearchTextChanged(SearchText);
@@ -213,6 +237,7 @@ public partial class NotesListViewModel : ObservableObject
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
             Notes.Insert(0, note);
+            RefreshFilterNotification();
         });
     }
 }
