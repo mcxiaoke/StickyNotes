@@ -1,27 +1,161 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:StickyNotes.Converters">
+                    xmlns:converters="clr-namespace:StickyNotes.Converters"
+                    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
 
-    <!-- 转换器实例注册 -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="StickyColors.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ========================================================================= -->
+    <!-- 1. 全局转换器注册                                                           -->
+    <!-- ========================================================================= -->
     <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
     <converters:FriendlyDateTimeConverter x:Key="FriendlyDateTimeConverter" />
     <converters:NoteColorToBackgroundBrushConverter x:Key="NoteColorToBgConverter" />
     <converters:NoteColorToToolbarBrushConverter x:Key="NoteColorToToolbarConverter" />
     <converters:NoteColorToTextBrushConverter x:Key="NoteColorToTextConverter" />
+    <converters:NoteColorToBorderBrushConverter x:Key="NoteColorToBorderConverter" />
+    <converters:NoteColorToAccentBrushConverter x:Key="NoteColorToAccentConverter" />
+    <converters:NoteColorToSecondaryTextBrushConverter x:Key="NoteColorToSecondaryTextConverter" />
+    <converters:NoteColorEqualsConverter x:Key="NoteColorEqualsConverter" />
 
-    <!-- 统一设计间距规范（Design Tokens） -->
+    <!-- ========================================================================= -->
+    <!-- 2. 统一设计间距规范（Spacing Tokens）                                      -->
+    <!-- ========================================================================= -->
     <Thickness x:Key="Spacing.None">0</Thickness>
-    <Thickness x:Key="Spacing.Small">4</Thickness>
-    <Thickness x:Key="Spacing.Medium">8</Thickness>
-    <Thickness x:Key="Spacing.Large">12</Thickness>
-    <Thickness x:Key="Spacing.XLarge">16</Thickness>
-    <Thickness x:Key="Spacing.PageMargin">16,12,16,16</Thickness>
+    <Thickness x:Key="Spacing.XXS">2</Thickness>
+    <Thickness x:Key="Spacing.XS">4</Thickness>
+    <Thickness x:Key="Spacing.S">8</Thickness>
+    <Thickness x:Key="Spacing.M">12</Thickness>
+    <Thickness x:Key="Spacing.L">16</Thickness>
+    <Thickness x:Key="Spacing.XL">20</Thickness>
+    <Thickness x:Key="Spacing.XXL">24</Thickness>
 
-    <!-- 统一控件圆角规范 -->
+    <!-- 复合内/外边距规范 -->
+    <Thickness x:Key="Thickness.PageMargin">16,14,16,16</Thickness>
+    <Thickness x:Key="Thickness.HeaderMargin">0,0,0,12</Thickness>
+    <Thickness x:Key="Thickness.CardPadding">14,12,14,12</Thickness>
+    <Thickness x:Key="Thickness.SearchHitPadding">14,12,14,12</Thickness>
+    <Thickness x:Key="Thickness.ChipPadding">12,5,12,5</Thickness>
+    <Thickness x:Key="Thickness.StickyEditorPadding">16,10,16,8</Thickness>
+    <Thickness x:Key="Thickness.StickyFooterMargin">16,0,16,4</Thickness>
+
+    <!-- ========================================================================= -->
+    <!-- 3. 统一控件圆角规范（CornerRadius Tokens）                                  -->
+    <!-- ========================================================================= -->
     <CornerRadius x:Key="CornerRadius.Small">4</CornerRadius>
-    <CornerRadius x:Key="CornerRadius.Medium">8</CornerRadius>
-    <!-- 专属无底色纯净多行编辑器样式：彻底杜绝聚焦变白，完美融入便签贴纸底色 -->
+    <CornerRadius x:Key="CornerRadius.Control">6</CornerRadius>
+    <CornerRadius x:Key="CornerRadius.Card">8</CornerRadius>
+    <CornerRadius x:Key="CornerRadius.Window">10</CornerRadius>
+    <CornerRadius x:Key="CornerRadius.Large">12</CornerRadius>
+    <CornerRadius x:Key="CornerRadius.Pill">999</CornerRadius>
+
+    <!-- ========================================================================= -->
+    <!-- 4. 阴影体系规范（Elevation & DropShadow Tokens）                           -->
+    <!-- ========================================================================= -->
+    <DropShadowEffect x:Key="Elevation.Card" BlurRadius="8" ShadowDepth="2" Opacity="0.06" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.CardHover" BlurRadius="12" ShadowDepth="3" Opacity="0.12" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.Popup" BlurRadius="16" ShadowDepth="4" Opacity="0.18" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.Window" BlurRadius="12" ShadowDepth="2" Opacity="0.14" Direction="270" />
+
+    <!-- ========================================================================= -->
+    <!-- 5. 字体与排版体系（Typography Tokens）                                      -->
+    <!-- ========================================================================= -->
+    <FontFamily x:Key="FontFamily.Default">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, sans-serif</FontFamily>
+
+    <!-- 管理中心主标题 -->
+    <Style x:Key="Type.TitleLarge" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 卡片与对话框标题 -->
+    <Style x:Key="Type.Subtitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- 强调正文 -->
+    <Style x:Key="Type.BodyStrong" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
+    </Style>
+
+    <!-- 普通正文 -->
+    <Style x:Key="Type.Body" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- 辅助/状态字 -->
+    <Style x:Key="Type.Caption" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
+    </Style>
+
+    <!-- 微型小标签字 -->
+    <Style x:Key="Type.CaptionSubtle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextTertiaryBrush}" />
+    </Style>
+
+    <!-- ========================================================================= -->
+    <!-- 6. 控件交互样式规范                                                         -->
+    <!-- ========================================================================= -->
+
+    <!-- 分类筛选胶囊样式 (Filter Chip) -->
+    <Style x:Key="FilterChipStyle" TargetType="RadioButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="ChipBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource CornerRadius.Pill}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ChipBorder" Property="Background" Value="#12000000" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="ChipBorder" Property="Background" Value="{StaticResource Fluent.AccentLightBgBrush}" />
+                            <Setter TargetName="ChipBorder" Property="BorderBrush" Value="{StaticResource Fluent.AccentLightBorderBrush}" />
+                            <Setter Property="Foreground" Value="{StaticResource Fluent.AccentBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 专属无底色纯净多行编辑器样式：融入便签贴纸底色 -->
     <Style x:Key="StickyEditorTextBoxStyle" TargetType="{x:Type TextBox}">
         <Setter Property="KeyboardNavigation.TabNavigation" Value="None" />
         <Setter Property="AllowDrop" Value="True" />
@@ -48,7 +182,9 @@
     <Style x:Key="StickyToolbarButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="6" />
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
@@ -56,17 +192,17 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="4"
+                            CornerRadius="{StaticResource CornerRadius.Small}"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#18000000" />
+                            <Setter TargetName="Bd" Property="Background" Value="#1A000000" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#2E000000" />
+                            <Setter TargetName="Bd" Property="Background" Value="#30000000" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -78,7 +214,9 @@
     <Style x:Key="StickyCloseButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="6" />
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
@@ -86,17 +224,19 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="4"
+                            CornerRadius="{StaticResource CornerRadius.Small}"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#E81123" />
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Fluent.DangerHoverBrush}" />
+                            <Setter Property="Foreground" Value="#FFFFFF" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#C4101E" />
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Fluent.DangerBrush}" />
+                            <Setter Property="Foreground" Value="#FFFFFF" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -105,3 +245,4 @@
     </Style>
 
 </ResourceDictionary>
+

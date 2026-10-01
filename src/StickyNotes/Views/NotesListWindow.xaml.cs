@@ -10,7 +10,7 @@ namespace StickyNotes.Views;
 /// <summary>
 /// 便签管理中心主窗口交互逻辑
 /// </summary>
-public partial class NotesListWindow : Window
+public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 {
     public NotesListViewModel ViewModel => (NotesListViewModel)DataContext;
 
@@ -51,12 +51,28 @@ public partial class NotesListWindow : Window
         };
     }
 
+    private void FilterAllRadio_Checked(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is NotesListViewModel vm)
+        {
+            vm.SelectedFilterIndex = 0;
+        }
+    }
+
+    private void FilterPinnedRadio_Checked(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is NotesListViewModel vm)
+        {
+            vm.SelectedFilterIndex = 1;
+        }
+    }
+
     private void NoteCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // 排除内部按钮触发的冒泡
         if (e.OriginalSource is DependencyObject dep)
         {
-            var btn = FindVisualAncestor<Button>(dep);
+            var btn = FindVisualAncestor<System.Windows.Controls.Button>(dep);
             if (btn != null) return;
         }
 

@@ -7,16 +7,23 @@
         Width="340" Height="380"
         MinWidth="260" MinHeight="220"
         WindowStyle="None"
-        AllowsTransparency="False"
-        ResizeMode="CanResizeWithGrip"
-        Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+        AllowsTransparency="True"
+        ResizeMode="CanResize"
+        Background="Transparent"
         Topmost="{Binding IsPinned}">
 
-    <Border BorderBrush="#22000000" BorderThickness="1">
+    <!-- 顶层外壳：提供 Windows 11 细腻外层阴影与柔和圆角 -->
+    <Border Margin="6"
+            CornerRadius="{StaticResource CornerRadius.Card}"
+            Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+            BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
+            BorderThickness="1"
+            Effect="{StaticResource Elevation.Window}">
+
         <Grid Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}">
             <Grid.RowDefinitions>
                 <!-- 顶部无缝工具栏 -->
-                <RowDefinition Height="40" />
+                <RowDefinition Height="34" />
                 <!-- 正文编辑区（占满剩余高度） -->
                 <RowDefinition Height="*" />
                 <!-- 底部微型辅助栏 -->
@@ -25,9 +32,10 @@
 
             <!-- 1. 顶部工具栏：一体化原色微调，全区域支持按住拖拽 -->
             <Border Grid.Row="0"
+                    CornerRadius="7,7,0,0"
                     Background="{Binding Color, Converter={StaticResource NoteColorToToolbarConverter}}"
                     MouseLeftButtonDown="Toolbar_MouseLeftButtonDown"
-                    Padding="8,0">
+                    Padding="6,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <!-- 左侧：新建按钮 -->
@@ -54,12 +62,15 @@
                         <!-- 置顶图钉切换按钮 -->
                         <Button Style="{StaticResource StickyToolbarButtonStyle}"
                                 ToolTip="置顶便签 (Ctrl+P)"
+                                Margin="0,0,2,0"
                                 Command="{Binding TogglePinCommand}">
                             <Grid>
-                                <Border x:Name="PinnedHighlight" Width="24" Height="24" CornerRadius="12"
+                                <!-- 置顶高亮底衬 -->
+                                <Border x:Name="PinnedHighlight" Width="26" Height="26"
+                                        CornerRadius="{StaticResource CornerRadius.Small}"
                                         Background="#26000000"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                <ui:SymbolIcon Symbol="Pin20" FontSize="16"
+                                <ui:SymbolIcon Symbol="Pin20" FontSize="15"
                                                Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
                             </Grid>
                         </Button>
@@ -68,8 +79,9 @@
                         <Button x:Name="MoreMenuButton"
                                 Style="{StaticResource StickyToolbarButtonStyle}"
                                 ToolTip="便签设置与颜色"
+                                Margin="0,0,2,0"
                                 Click="MoreMenuButton_Click">
-                            <ui:SymbolIcon Symbol="MoreHorizontal20" FontSize="16"
+                            <ui:SymbolIcon Symbol="MoreHorizontal20" FontSize="15"
                                            Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
                         </Button>
 
@@ -79,151 +91,188 @@
                                Placement="Bottom"
                                StaysOpen="False"
                                AllowsTransparency="True">
-                        <Border Background="#FFFFFFFF"
-                                BorderBrush="#1F000000"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="12"
-                                Margin="4">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.16" Direction="270" />
-                            </Border.Effect>
+                            <Border Background="#FFFFFFFF"
+                                    BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource CornerRadius.Card}"
+                                    Padding="{StaticResource Thickness.CardPadding}"
+                                    Margin="4"
+                                    Effect="{StaticResource Elevation.Popup}">
 
-                            <StackPanel Width="210">
-                                <!-- 顶部提示 -->
-                                <TextBlock Text="便签主题色彩"
-                                           FontSize="12"
-                                           FontWeight="SemiBold"
-                                           Foreground="#888888"
-                                           Margin="2,0,0,8" />
+                                <StackPanel Width="220">
+                                    <!-- 顶部提示 -->
+                                    <TextBlock Text="便签主题色彩"
+                                               Style="{StaticResource Type.Caption}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource Fluent.TextSecondaryBrush}"
+                                               Margin="2,0,0,8" />
 
-                                <!-- 7 色精美圆形调色盘 -->
-                                <WrapPanel HorizontalAlignment="Center">
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Yellow.BgBrush}" BorderBrush="#DDCC77" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Yellow}" ToolTip="经典黄" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Green.BgBrush}" BorderBrush="#99DDAA" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Green}" ToolTip="清新绿" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Pink.BgBrush}" BorderBrush="#EEAACC" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Pink}" ToolTip="柔和粉" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Purple.BgBrush}" BorderBrush="#CCBBDD" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Purple}" ToolTip="梦幻紫" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Blue.BgBrush}" BorderBrush="#99CCEE" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Blue}" ToolTip="天空蓝" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Gray.BgBrush}" BorderBrush="#CCCCCC" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Gray}" ToolTip="浅灰白" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Charcoal.BgBrush}" BorderBrush="#444444" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Charcoal}" ToolTip="暗黑夜间" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                </WrapPanel>
+                                    <!-- 7 色精美调色盘：带当前选中 Checkmark 勾选反馈 -->
+                                    <WrapPanel HorizontalAlignment="Center">
+                                        <!-- 1. 经典黄 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Yellow.BgBrush}" BorderBrush="{StaticResource Sticky.Yellow.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Yellow}" ToolTip="经典黄" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Yellow.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Yellow'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
 
-                                <Separator Margin="0,10,0,6" Background="#1F000000" />
+                                        <!-- 2. 清新绿 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Green.BgBrush}" BorderBrush="{StaticResource Sticky.Green.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Green}" ToolTip="清新绿" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Green.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Green'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
 
-                                <!-- 快捷跳转：便签列表 -->
-                                <ui:Button Appearance="Transparent"
-                                           HorizontalAlignment="Stretch"
-                                           HorizontalContentAlignment="Left"
-                                           Icon="AppsListDetail20"
-                                           Content="便签管理中心 (Ctrl+H)"
-                                           FontSize="13"
-                                           Padding="8,6"
-                                           Click="ShowNotesList_Click" />
+                                        <!-- 3. 柔和粉 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Pink.BgBrush}" BorderBrush="{StaticResource Sticky.Pink.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Pink}" ToolTip="柔和粉" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Pink.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Pink'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
 
-                                <!-- 删除便签 -->
-                                <ui:Button Appearance="Transparent"
-                                           HorizontalAlignment="Stretch"
-                                           HorizontalContentAlignment="Left"
-                                           Icon="Delete20"
-                                           Content="删除便签"
-                                           FontSize="13"
-                                           Padding="8,6"
-                                           Foreground="#D83B01"
-                                           Click="DeleteButton_Click" />
-                            </StackPanel>
-                        </Border>
-                    </Popup>
+                                        <!-- 4. 梦幻紫 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Purple.BgBrush}" BorderBrush="{StaticResource Sticky.Purple.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Purple}" ToolTip="梦幻紫" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Purple.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Purple'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
 
-                    <!-- 关闭按钮（收起贴纸窗口） -->
-                    <Button Style="{StaticResource StickyCloseButtonStyle}"
-                            ToolTip="关闭便签 (Ctrl+W)"
-                            Click="CloseButton_Click">
-                        <ui:SymbolIcon Symbol="Dismiss20" FontSize="16"
-                                       Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
-                    </Button>
-                </StackPanel>
+                                        <!-- 5. 天空蓝 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Blue.BgBrush}" BorderBrush="{StaticResource Sticky.Blue.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Blue}" ToolTip="天空蓝" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Blue.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Blue'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+
+                                        <!-- 6. 浅灰白 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Gray.BgBrush}" BorderBrush="{StaticResource Sticky.Gray.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Gray}" ToolTip="浅灰白" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Gray.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Gray'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+
+                                        <!-- 7. 暗黑夜间 -->
+                                        <Button Width="26" Height="26" Margin="2" Background="{StaticResource Sticky.Charcoal.BgBrush}" BorderBrush="{StaticResource Sticky.Charcoal.BorderBrush}" BorderThickness="1" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Charcoal}" ToolTip="暗黑夜间" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid>
+                                                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+                                                        <ui:SymbolIcon Symbol="Checkmark16" FontSize="13" Foreground="{StaticResource Sticky.Charcoal.TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding Color, Converter={StaticResource NoteColorEqualsConverter}, ConverterParameter='Charcoal'}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </WrapPanel>
+
+                                    <Separator Margin="0,10,0,6" Background="{StaticResource Fluent.SubtleBorderBrush}" />
+
+                                    <!-- 快捷跳转：便签列表 -->
+                                    <ui:Button Appearance="Transparent"
+                                               HorizontalAlignment="Stretch"
+                                               HorizontalContentAlignment="Left"
+                                               Icon="AppsListDetail20"
+                                               Content="便签管理中心 (Ctrl+H)"
+                                               FontSize="13"
+                                               Padding="8,6"
+                                               Click="ShowNotesList_Click" />
+
+                                    <!-- 删除便签 -->
+                                    <ui:Button Appearance="Transparent"
+                                               HorizontalAlignment="Stretch"
+                                               HorizontalContentAlignment="Left"
+                                               Icon="Delete20"
+                                               Content="删除便签 (Ctrl+D)"
+                                               FontSize="13"
+                                               Padding="8,6"
+                                               Foreground="{StaticResource Fluent.DangerBrush}"
+                                               Click="DeleteButton_Click" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+
+                        <!-- 关闭按钮（收起贴纸窗口） -->
+                        <Button Style="{StaticResource StickyCloseButtonStyle}"
+                                ToolTip="关闭便签 (Ctrl+W)"
+                                Click="CloseButton_Click">
+                            <ui:SymbolIcon Symbol="Dismiss20" FontSize="15"
+                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 2. 正文编辑区：使用定制的 StickyEditorTextBoxStyle，彻底透明绝不变白 -->
+            <TextBox x:Name="EditorTextBox"
+                     Grid.Row="1"
+                     Style="{StaticResource StickyEditorTextBoxStyle}"
+                     Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                     CaretBrush="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                     AcceptsReturn="True"
+                     AcceptsTab="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"
+                     IsInactiveSelectionHighlightEnabled="True"
+                     SelectionBrush="#3399FF"
+                     FontSize="14"
+                     FontFamily="{StaticResource FontFamily.Default}"
+                     Padding="{StaticResource Thickness.StickyEditorPadding}" />
+
+            <!-- 3. 底部微型辅助栏：统计字符数与已同步状态 -->
+            <Grid Grid.Row="2" Margin="{StaticResource Thickness.StickyFooterMargin}" VerticalAlignment="Center">
+                <!-- 实时字数与状态提示 -->
+                <TextBlock Style="{StaticResource Type.CaptionSubtle}"
+                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                           VerticalAlignment="Center">
+                    <Run Text="{Binding Content.Length, Mode=OneWay}" /><Run Text=" 字符" />
+                </TextBlock>
+
+                <!-- 自动保存状态提示 -->
+                <TextBlock Style="{StaticResource Type.CaptionSubtle}"
+                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           Text="已同步" />
             </Grid>
-        </Border>
-
-        <!-- 2. 正文编辑区：使用定制的 StickyEditorTextBoxStyle，彻底透明绝不变白 -->
-        <TextBox x:Name="EditorTextBox"
-                 Grid.Row="1"
-                 Style="{StaticResource StickyEditorTextBoxStyle}"
-                 Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
-                 CaretBrush="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
-                 AcceptsReturn="True"
-                 AcceptsTab="True"
-                 TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto"
-                 HorizontalScrollBarVisibility="Disabled"
-                 IsInactiveSelectionHighlightEnabled="True"
-                 SelectionBrush="#3399FF"
-                 FontSize="15"
-                 FontFamily="Segoe UI, Microsoft YaHei UI"
-                 Padding="16,10,16,8" />
-
-        <!-- 3. 底部微型辅助栏：统计字符数与右下角缩放角标 -->
-        <Grid Grid.Row="2" Margin="16,0,16,4" VerticalAlignment="Center">
-            <!-- 实时字数与状态提示 -->
-            <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
-                       Opacity="0.55"
-                       VerticalAlignment="Center">
-                <Run Text="{Binding Content.Length, Mode=OneWay}" /><Run Text=" 字符" />
-            </TextBlock>
-
-            <!-- 自动保存状态提示 -->
-            <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
-                       Opacity="0.4"
-                       HorizontalAlignment="Right"
-                       Margin="0,0,16,0"
-                       VerticalAlignment="Center"
-                       Text="已同步" />
         </Grid>
-    </Grid>
     </Border>
 </Window>
+

@@ -15,20 +15,38 @@ public enum NoteColor
 }
 
 /// <summary>
+/// 便签主题色彩完整定义
+/// </summary>
+public sealed record NoteThemeColors(
+    string BackgroundHex,
+    string ToolbarHex,
+    string TextHex,
+    string BorderHex,
+    string AccentHex,
+    string SecondaryTextHex
+);
+
+/// <summary>
 /// 便签颜色值转换与元数据
 /// </summary>
 public static class NoteColorExtensions
 {
-    public static (string BackgroundHex, string ToolbarHex, string TextHex) GetThemeColors(this NoteColor color) =>
+    public static NoteThemeColors GetTheme(this NoteColor color) =>
         color switch
         {
-            NoteColor.Yellow => ("#FFF7D1", "#FFEE9D", "#1C1C1C"),
-            NoteColor.Green => ("#E4F9E0", "#C8F2C2", "#1C1C1C"),
-            NoteColor.Pink => ("#FFE4EF", "#FFC7DE", "#1C1C1C"),
-            NoteColor.Purple => ("#F2E6FF", "#E4CCFF", "#1C1C1C"),
-            NoteColor.Blue => ("#E1F3FE", "#C3E8FD", "#1C1C1C"),
-            NoteColor.Gray => ("#F5F5F5", "#E8E8E8", "#1C1C1C"),
-            NoteColor.Charcoal => ("#2D2D2D", "#222222", "#F0F0F0"),
-            _ => ("#FFF7D1", "#FFEE9D", "#1C1C1C")
+            NoteColor.Yellow => new("#FFF7D1", "#FFEE9D", "#202020", "#E6D77D", "#E0A800", "#6C6546"),
+            NoteColor.Green => new("#E4F9E0", "#C8F2C2", "#202020", "#BCE5B6", "#209E35", "#476A42"),
+            NoteColor.Pink => new("#FFE4EF", "#FFC7DE", "#202020", "#F5BCCE", "#DB3374", "#774457"),
+            NoteColor.Purple => new("#F2E6FF", "#E4CCFF", "#202020", "#D5BAFA", "#7F3CD8", "#594575"),
+            NoteColor.Blue => new("#E1F3FE", "#C3E8FD", "#202020", "#B7DAF5", "#1079D1", "#425C70"),
+            NoteColor.Gray => new("#F6F6F8", "#E8E8EB", "#202020", "#DCDCE0", "#636366", "#616166"),
+            NoteColor.Charcoal => new("#292929", "#1E1E1E", "#F5F5F5", "#3D3D3D", "#4CC2FF", "#A6A6A6"),
+            _ => new("#FFF7D1", "#FFEE9D", "#202020", "#E6D77D", "#E0A800", "#6C6546")
         };
+
+    public static (string BackgroundHex, string ToolbarHex, string TextHex) GetThemeColors(this NoteColor color)
+    {
+        var theme = color.GetTheme();
+        return (theme.BackgroundHex, theme.ToolbarHex, theme.TextHex);
+    }
 }

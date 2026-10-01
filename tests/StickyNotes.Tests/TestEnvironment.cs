@@ -69,11 +69,11 @@ public class TestEnvironment
             });
             rd.MergedDictionaries.Add(new ResourceDictionary
             {
-                Source = new Uri("pack://application:,,,/StickyNotes;component/Resources/DesignTokens.xaml", UriKind.Absolute)
+                Source = new Uri("pack://application:,,,/StickyNotes;component/Resources/StickyColors.xaml", UriKind.Absolute)
             });
             rd.MergedDictionaries.Add(new ResourceDictionary
             {
-                Source = new Uri("pack://application:,,,/StickyNotes;component/Resources/StickyColors.xaml", UriKind.Absolute)
+                Source = new Uri("pack://application:,,,/StickyNotes;component/Resources/DesignTokens.xaml", UriKind.Absolute)
             });
 
             app.Resources = rd;
@@ -187,5 +187,34 @@ public class TestEnvironment
         }
 
         win.Close();
+    }
+
+    /// <summary>
+    /// 将指定 FrameworkElement（例如弹出层、卡片等）单独测量排版并抓取保存为真实的高清 PNG 截图
+    /// </summary>
+    public static void SaveElementSnapshot(FrameworkElement element, double width, double height, string filename)
+    {
+        element.Width = width;
+        element.Height = height;
+        element.Measure(new Size(width, height));
+        element.Arrange(new Rect(0, 0, width, height));
+        element.UpdateLayout();
+
+        int pxW = (int)Math.Max(1, width);
+        int pxH = (int)Math.Max(1, height);
+
+        var rtb = new RenderTargetBitmap(pxW, pxH, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(element);
+
+        string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\..\.."));
+        string screenshotDir = Path.Combine(projectRoot, "temp", "screenshots");
+        Directory.CreateDirectory(screenshotDir);
+
+        string fullPath = Path.Combine(screenshotDir, filename);
+        var enc = new PngBitmapEncoder();
+        enc.Frames.Add(BitmapFrame.Create(rtb));
+
+        using var fs = File.Create(fullPath);
+        enc.Save(fs);
     }
 }
