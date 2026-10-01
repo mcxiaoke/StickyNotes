@@ -21,6 +21,32 @@ public partial class NoteWindow : Window
         InitializeComponent();
         DataContext = viewModel;
 
+        // 挂载 Win32 消息钩子实现四周边缘平滑拖拽调整窗口大小 (Resize)
+        SourceInitialized += (s, e) =>
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            System.Windows.Interop.HwndSource.FromHwnd(handle)?.AddHook(WndProc);
+        };
+
+        // 实时同步尺寸与坐标至实体，保证持久化绝对准确
+        SizeChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Normal && ActualWidth > 0 && ActualHeight > 0)
+            {
+                ViewModel.Note.WindowWidth = ActualWidth;
+                ViewModel.Note.WindowHeight = ActualHeight;
+            }
+        };
+
+        LocationChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Normal)
+            {
+                ViewModel.Note.WindowX = Left;
+                ViewModel.Note.WindowY = Top;
+            }
+        };
+
         // 监听窗口失焦与关闭事件，立即触发无延迟强制刷盘保存
         Deactivated += async (_, _) =>
         {
@@ -176,5 +202,44 @@ public partial class NoteWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_NCHITTEST = 0x0084;
+        const int HTLEFT = 10;
+        const int HTRIGHT = 11;
+        const int HTTOP = 12;
+        const int HTTOPLEFT = 13;
+        const int HTTOPRIGHT = 14;
+        const int HTBOTTOM = 15;
+        const int HTBOTTOMLEFT = 16;
+        const int HTBOTTOMRIGHT = 17;
+
+        if (msg == WM_NCHITTEST)
+        {
+            int x = lParam.ToInt32() & 0xFFFF;
+            int y = (lParam.ToInt32() >> 16) & 0xFFFF;
+            if (x > 32767) x -= 65536;
+            if (y > 32767) y -= 65536;
+
+            var pt = PointFromScreen(new Point(x, y));
+            const double border = 8.0;
+
+            bool isLeft = pt.X <= border;
+            bool isRight = pt.X >= ActualWidth - border;
+            bool isTop = pt.Y <= border;
+            bool isBottom = pt.Y >= ActualHeight - border;
+
+            if (isTop && isLeft) { handled = true; return (IntPtr)HTTOPLEFT; }
+            if (isTop && isRight) { handled = true; return (IntPtr)HTTOPRIGHT; }
+            if (isBottom && isLeft) { handled = true; return (IntPtr)HTBOTTOMLEFT; }
+            if (isBottom && isRight) { handled = true; return (IntPtr)HTBOTTOMRIGHT; }
+            if (isLeft) { handled = true; return (IntPtr)HTLEFT; }
+            if (isRight) { handled = true; return (IntPtr)HTRIGHT; }
+            if (isTop) { handled = true; return (IntPtr)HTTOP; }
+            if (isBottom) { handled = true; return (IntPtr)HTBOTTOM; }
+        }
+        return IntPtr.Zero;
     }
 }

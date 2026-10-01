@@ -125,12 +125,15 @@ public partial class NotesListViewModel : ObservableObject
     [RelayCommand]
     public async Task NewNoteAsync()
     {
+        var (startX, startY) = _windowManager.CalculateSmartRightPlacement(380, 420);
         var newNote = new Note
         {
             Content = string.Empty,
             Color = NoteColor.Yellow,
-            WindowX = 200 + (Notes.Count % 5) * 30,
-            WindowY = 150 + (Notes.Count % 5) * 30
+            WindowWidth = 380,
+            WindowHeight = 420,
+            WindowX = startX,
+            WindowY = startY
         };
 
         await _repository.SaveAsync(newNote);

@@ -110,7 +110,7 @@ public class UiRenderingAndScreenshotTests
             Assert.IsFalse(vm.IsSearching);
 
             // 抓取并保存真实渲染截图
-            TestEnvironment.SaveWindowSnapshot(win, 440, 620, "01_NotesListWindow_Normal.png");
+            TestEnvironment.SaveWindowSnapshot(win, 480, 720, "01_NotesListWindow_Normal.png");
         });
     }
 
@@ -158,7 +158,7 @@ public class UiRenderingAndScreenshotTests
 
             Assert.AreEqual(2, vm.SearchResults.Count);
 
-            TestEnvironment.SaveWindowSnapshot(win, 440, 620, "02_NotesListWindow_Searching.png");
+            TestEnvironment.SaveWindowSnapshot(win, 480, 720, "02_NotesListWindow_Searching.png");
         });
     }
 
@@ -185,7 +185,7 @@ public class UiRenderingAndScreenshotTests
             Assert.AreEqual(NoteColor.Yellow, win.ViewModel.Color);
             Assert.IsFalse(win.ViewModel.IsPinned);
 
-            TestEnvironment.SaveWindowSnapshot(win, 320, 360, "03_NoteWindow_Yellow.png");
+            TestEnvironment.SaveWindowSnapshot(win, 380, 420, "03_NoteWindow_Yellow.png");
             coordinator.Dispose();
         });
     }
@@ -213,7 +213,7 @@ public class UiRenderingAndScreenshotTests
             Assert.AreEqual(NoteColor.Green, win.ViewModel.Color);
             Assert.IsTrue(win.ViewModel.IsPinned);
 
-            TestEnvironment.SaveWindowSnapshot(win, 320, 360, "04_NoteWindow_Green_Pinned.png");
+            TestEnvironment.SaveWindowSnapshot(win, 380, 420, "04_NoteWindow_Green_Pinned.png");
             coordinator.Dispose();
         });
     }
@@ -276,7 +276,7 @@ public class UiRenderingAndScreenshotTests
             // 校验选中高亮文本确实为目标关键字
             Assert.AreEqual(keyword, win.Editor.SelectedText);
 
-            TestEnvironment.SaveWindowSnapshot(win, 340, 380, "05_NoteWindow_JumpHighlighted.png");
+            TestEnvironment.SaveWindowSnapshot(win, 380, 420, "05_NoteWindow_JumpHighlighted.png");
             coordinator.Dispose();
         });
     }
@@ -303,7 +303,7 @@ public class UiRenderingAndScreenshotTests
 
             Assert.AreEqual(NoteColor.Purple, win.ViewModel.Color);
 
-            TestEnvironment.SaveWindowSnapshot(win, 340, 380, "06_NoteWindow_Purple_Theme.png");
+            TestEnvironment.SaveWindowSnapshot(win, 380, 420, "06_NoteWindow_Purple_Theme.png");
             coordinator.Dispose();
         });
     }
@@ -359,6 +359,34 @@ public class UiRenderingAndScreenshotTests
             }
 
             coordinator.Dispose();
+        });
+    }
+
+    [TestMethod]
+    public void WindowManager_CalculateSmartRightPlacement_PositionsToRightWithStaggerOffset()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var windowManager = new WindowManager(null!, repo);
+
+            // 第一次计算位置
+            var (x1, y1) = windowManager.CalculateSmartRightPlacement(380, 420);
+            Assert.IsTrue(x1 > 0);
+            Assert.IsTrue(y1 > 0);
+
+            // 模拟打开一张窗口后，第二次计算位置产生错开位移（防遮挡）
+            var note1 = new Note { Id = Guid.NewGuid(), WindowWidth = 380, WindowHeight = 420 };
+            typeof(WindowManager).GetField("_activeNoteWindows", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?
+                .SetValue(windowManager, new Dictionary<Guid, NoteWindow>
+                {
+                    [note1.Id] = null!
+                });
+
+            var (x2, y2) = windowManager.CalculateSmartRightPlacement(380, 420);
+            // 验证第二次排布具有递增错开位移
+            Assert.AreNotEqual(x1, x2);
+            Assert.AreNotEqual(y1, y2);
         });
     }
 }
