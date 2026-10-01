@@ -34,6 +34,9 @@ public partial class NotesListViewModel : ObservableObject
     [ObservableProperty]
     private int _searchHitCount;
 
+    [ObservableProperty]
+    private bool _hasNoNotes;
+
     public NotesListViewModel(
         INoteRepository repository,
         ISearchService searchService,
@@ -60,6 +63,7 @@ public partial class NotesListViewModel : ObservableObject
         {
             Notes.Add(note);
         }
+        HasNoNotes = Notes.Count == 0;
     }
 
     partial void OnSearchTextChanged(string value)
@@ -118,6 +122,7 @@ public partial class NotesListViewModel : ObservableObject
 
         await _repository.SaveAsync(newNote);
         Notes.Insert(0, newNote);
+        HasNoNotes = false;
 
         // 立即唤起独立贴纸窗口并聚焦
         _windowManager.OpenOrActivateNote(newNote);
@@ -130,11 +135,21 @@ public partial class NotesListViewModel : ObservableObject
     }
 
     [RelayCommand]
+    public async Task TogglePinNoteAsync(Note note)
+    {
+        note.IsPinned = !note.IsPinned;
+        note.UpdatedAt = DateTime.UtcNow;
+        await _repository.SaveAsync(note);
+        WeakReferenceMessenger.Default.Send(new NoteUpdatedMessage(note));
+    }
+
+    [RelayCommand]
     public async Task DeleteNoteAsync(Note note)
     {
         _windowManager.CloseNoteWindow(note.Id);
         await _repository.SoftDeleteAsync(note.Id);
         Notes.Remove(note);
+        HasNoNotes = Notes.Count == 0;
 
         // 重新同步搜索状态
         if (IsSearching)
