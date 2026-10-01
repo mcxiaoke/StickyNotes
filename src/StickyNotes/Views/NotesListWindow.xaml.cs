@@ -21,7 +21,13 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 
         Loaded += async (_, _) =>
         {
+            RestoreWindowPlacement();
             await ViewModel.LoadNotesAsync();
+        };
+
+        Closing += (_, _) =>
+        {
+            SaveWindowPlacement();
         };
 
         KeyDown += (s, e) =>
@@ -157,5 +163,56 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             current = VisualTreeHelper.GetParent(current);
         }
         return null;
+    }
+
+    private record WindowPlacementData(double Left, double Top, double Width, double Height);
+
+    private void RestoreWindowPlacement()
+    {
+        try
+        {
+            if (System.IO.File.Exists(StickyNotes.Infrastructure.AppPaths.WindowConfigPath))
+            {
+                var json = System.IO.File.ReadAllText(StickyNotes.Infrastructure.AppPaths.WindowConfigPath);
+                var config = System.Text.Json.JsonSerializer.Deserialize<WindowPlacementData>(json);
+                if (config != null && config.Width >= MinWidth && config.Height >= MinHeight)
+                {
+                    double vLeft = SystemParameters.VirtualScreenLeft;
+                    double vTop = SystemParameters.VirtualScreenTop;
+                    double vRight = vLeft + SystemParameters.VirtualScreenWidth;
+                    double vBottom = vTop + SystemParameters.VirtualScreenHeight;
+
+                    if (config.Left >= vLeft - 20 && config.Left + 50 <= vRight &&
+                        config.Top >= vTop - 20 && config.Top + 50 <= vBottom)
+                    {
+                        WindowStartupLocation = WindowStartupLocation.Manual;
+                        Left = config.Left;
+                        Top = config.Top;
+                        Width = config.Width;
+                        Height = config.Height;
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void SaveWindowPlacement()
+    {
+        try
+        {
+            if (WindowState == WindowState.Normal)
+            {
+                var data = new WindowPlacementData(
+                    Left,
+                    Top,
+                    ActualWidth > 0 ? ActualWidth : Width,
+                    ActualHeight > 0 ? ActualHeight : Height
+                );
+                var json = System.Text.Json.JsonSerializer.Serialize(data);
+                System.IO.File.WriteAllText(StickyNotes.Infrastructure.AppPaths.WindowConfigPath, json);
+            }
+        }
+        catch { }
     }
 }

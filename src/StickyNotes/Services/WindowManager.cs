@@ -42,7 +42,30 @@ public sealed class WindowManager
 
         var window = new NoteWindow(vm);
 
-        // 恢复窗口上次保存的坐标与尺寸
+        // 如果坐标属于未初始化的默认值，或者与现有窗口完全重叠，计算主窗口右侧防遮挡错开坐标
+        bool isDefaultOrUnset = (note.WindowX <= 0 || (Math.Abs(note.WindowX - 150) < 1 && Math.Abs(note.WindowY - 150) < 1));
+        bool isOverlapping = _activeNoteWindows.Values.Any(w => Math.Abs(w.Left - note.WindowX) < 6 && Math.Abs(w.Top - note.WindowY) < 6);
+
+        if (isDefaultOrUnset || isOverlapping)
+        {
+            var (newLeft, newTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
+            note.WindowX = newLeft;
+            note.WindowY = newTop;
+        }
+        else
+        {
+            // 屏幕工作区保护（防止拔掉显示器后窗口移出视野）
+            var workArea = SystemParameters.WorkArea;
+            if (note.WindowX + 50 > workArea.Right || note.WindowY + 50 > workArea.Bottom ||
+                note.WindowX + note.WindowWidth < workArea.Left || note.WindowY < workArea.Top)
+            {
+                var (safeLeft, safeTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
+                note.WindowX = safeLeft;
+                note.WindowY = safeTop;
+            }
+        }
+
+        // 应用窗口坐标与尺寸
         window.Left = note.WindowX;
         window.Top = note.WindowY;
         window.Width = note.WindowWidth;
@@ -104,4 +127,51 @@ public sealed class WindowManager
     /// 获取当前正在运行的便签窗口字典
     /// </summary>
     public IReadOnlyDictionary<Guid, NoteWindow> ActiveWindows => _activeNoteWindows;
+
+    /// <summary>
+    /// 计算相对于主管理窗口右侧的错开定位坐标（防止多窗口完全重叠遮挡）
+    /// </summary>
+    public (double Left, double Top) CalculateSmartRightPlacement(double windowWidth, double windowHeight)
+    {
+        var workArea = SystemParameters.WorkArea;
+        double mainLeft = 100;
+        double mainTop = 100;
+        double mainWidth = 480;
+
+        var mainWindow = Application.Current?.MainWindow;
+        if (mainWindow != null && mainWindow.IsVisible && mainWindow.WindowState != WindowState.Minimized)
+        {
+            mainLeft = mainWindow.Left;
+            mainTop = mainWindow.Top;
+            mainWidth = mainWindow.ActualWidth > 0 ? mainWindow.ActualWidth : mainWindow.Width;
+        }
+
+        // 默认放置在主窗口右侧，留 14px 间隙
+        double startX = mainLeft + mainWidth + 14;
+        // 如果右侧屏幕放不下，则自适应尝试主窗口左侧或靠屏幕右边缘
+        if (startX + windowWidth > workArea.Right)
+        {
+            startX = mainLeft - windowWidth - 14;
+            if (startX < workArea.Left)
+            {
+                startX = Math.Max(workArea.Left + 10, workArea.Right - windowWidth - 20);
+            }
+        }
+
+        // 错开层叠偏移算法（Staggered cascade offset，避免完全重叠遮挡）
+        int staggerIndex = _activeNoteWindows.Count % 7;
+        double offsetX = staggerIndex * 30;
+        double offsetY = staggerIndex * 32;
+
+        double targetX = startX + offsetX;
+        double targetTop = mainTop + offsetY;
+
+        // 屏幕边界保护
+        if (targetX + windowWidth > workArea.Right)
+            targetX = Math.Max(workArea.Left + 10, workArea.Right - windowWidth - 10);
+        if (targetTop + windowHeight > workArea.Bottom)
+            targetTop = Math.Max(workArea.Top + 10, workArea.Bottom - windowHeight - 20);
+
+        return (targetX, targetTop);
+    }
 }

@@ -42,12 +42,12 @@ public sealed class Note
     /// <summary>
     /// 独立窗口宽度
     /// </summary>
-    public double WindowWidth { get; set; } = 320;
+    public double WindowWidth { get; set; } = 380;
 
     /// <summary>
     /// 独立窗口高度
     /// </summary>
-    public double WindowHeight { get; set; } = 360;
+    public double WindowHeight { get; set; } = 420;
 
     /// <summary>
     /// 上次退出时贴纸窗口是否处于打开状态

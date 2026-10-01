@@ -40,6 +40,11 @@ public static class AppPaths
     public static string DatabasePath => Path.Combine(DataDirectory, "notes.db");
 
     /// <summary>
+    /// 主管理窗口位置与尺寸记忆配置文件路径
+    /// </summary>
+    public static string WindowConfigPath => Path.Combine(DataDirectory, "window.json");
+
+    /// <summary>
     /// 本地轮转备份目录
     /// </summary>
     public static string BackupsDirectory
