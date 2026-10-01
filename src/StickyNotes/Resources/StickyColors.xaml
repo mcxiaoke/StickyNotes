@@ -1,0 +1,46 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 经典黄 Yellow -->
+    <Color x:Key="Sticky.Yellow.BgColor">#FFF7D1</Color>
+    <Color x:Key="Sticky.Yellow.ToolbarColor">#FFEE9D</Color>
+    <SolidColorBrush x:Key="Sticky.Yellow.BgBrush" Color="#FFF7D1" />
+    <SolidColorBrush x:Key="Sticky.Yellow.ToolbarBrush" Color="#FFEE9D" />
+
+    <!-- 清新绿 Green -->
+    <Color x:Key="Sticky.Green.BgColor">#E4F9E0</Color>
+    <Color x:Key="Sticky.Green.ToolbarColor">#C8F2C2</Color>
+    <SolidColorBrush x:Key="Sticky.Green.BgBrush" Color="#E4F9E0" />
+    <SolidColorBrush x:Key="Sticky.Green.ToolbarBrush" Color="#C8F2C2" />
+
+    <!-- 柔和粉 Pink -->
+    <Color x:Key="Sticky.Pink.BgColor">#FFE4EF</Color>
+    <Color x:Key="Sticky.Pink.ToolbarColor">#FFC7DE</Color>
+    <SolidColorBrush x:Key="Sticky.Pink.BgBrush" Color="#FFE4EF" />
+    <SolidColorBrush x:Key="Sticky.Pink.ToolbarBrush" Color="#FFC7DE" />
+
+    <!-- 梦幻紫 Purple -->
+    <Color x:Key="Sticky.Purple.BgColor">#F2E6FF</Color>
+    <Color x:Key="Sticky.Purple.ToolbarColor">#E4CCFF</Color>
+    <SolidColorBrush x:Key="Sticky.Purple.BgBrush" Color="#F2E6FF" />
+    <SolidColorBrush x:Key="Sticky.Purple.ToolbarBrush" Color="#E4CCFF" />
+
+    <!-- 天空蓝 Blue -->
+    <Color x:Key="Sticky.Blue.BgColor">#E1F3FE</Color>
+    <Color x:Key="Sticky.Blue.ToolbarColor">#C3E8FD</Color>
+    <SolidColorBrush x:Key="Sticky.Blue.BgBrush" Color="#E1F3FE" />
+    <SolidColorBrush x:Key="Sticky.Blue.ToolbarBrush" Color="#C3E8FD" />
+
+    <!-- 浅灰白 Gray -->
+    <Color x:Key="Sticky.Gray.BgColor">#F5F5F5</Color>
+    <Color x:Key="Sticky.Gray.ToolbarColor">#E8E8E8</Color>
+    <SolidColorBrush x:Key="Sticky.Gray.BgBrush" Color="#F5F5F5" />
+    <SolidColorBrush x:Key="Sticky.Gray.ToolbarBrush" Color="#E8E8E8" />
+
+    <!-- 暗黑夜间 Charcoal -->
+    <Color x:Key="Sticky.Charcoal.BgColor">#2D2D2D</Color>
+    <Color x:Key="Sticky.Charcoal.ToolbarColor">#222222</Color>
+    <SolidColorBrush x:Key="Sticky.Charcoal.BgBrush" Color="#2D2D2D" />
+    <SolidColorBrush x:Key="Sticky.Charcoal.ToolbarBrush" Color="#222222" />
+
+</ResourceDictionary>

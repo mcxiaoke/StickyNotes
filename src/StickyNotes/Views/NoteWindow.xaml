@@ -1,0 +1,129 @@
+<Window x:Class="StickyNotes.Views.NoteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:models="clr-namespace:StickyNotes.Models"
+        Title="{Binding Note.DisplayTitle}"
+        Width="320" Height="360"
+        MinWidth="240" MinHeight="200"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="CanResizeWithGrip"
+        Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+        Topmost="{Binding IsPinned}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- 极窄悬浮工具栏 -->
+            <RowDefinition Height="36" />
+            <!-- 正文编辑区 -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 顶部工具栏：支持按住拖拽移动窗口 -->
+        <Border Grid.Row="0"
+                Background="{Binding Color, Converter={StaticResource NoteColorToToolbarConverter}}"
+                MouseLeftButtonDown="Toolbar_MouseLeftButtonDown">
+            <Grid Margin="{StaticResource Spacing.Small}">
+                <Grid.ColumnDefinitions>
+                    <!-- 左侧操作：新建便签 -->
+                    <ColumnDefinition Width="Auto" />
+                    <!-- 中间拖拽弹性空间 -->
+                    <ColumnDefinition Width="*" />
+                    <!-- 右侧工具：置顶、换色、更多/删除、关闭 -->
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 新建按钮 -->
+                <ui:Button Grid.Column="0"
+                           Appearance="Transparent"
+                           ToolTip="新建便签 (Ctrl+N)"
+                           Padding="6,4"
+                           Click="NewNoteButton_Click">
+                    <ui:SymbolIcon Symbol="Add20" FontSize="16" Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                </ui:Button>
+
+                <!-- 右侧按钮组合 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <!-- 置顶切换按钮 -->
+                    <ui:Button Appearance="Transparent"
+                               ToolTip="置顶便签"
+                               Padding="6,4"
+                               Command="{Binding TogglePinCommand}">
+                        <ui:SymbolIcon Symbol="Pin20" FontSize="16" Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                    </ui:Button>
+
+                    <!-- 调色板按钮 -->
+                    <ui:Button x:Name="ColorPaletteButton"
+                               Appearance="Transparent"
+                               ToolTip="修改便签颜色"
+                               Padding="6,4"
+                               Click="ColorPaletteButton_Click">
+                        <ui:SymbolIcon Symbol="Color20" FontSize="16" Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                    </ui:Button>
+
+                    <!-- 调色板弹出层 -->
+                    <Popup x:Name="ColorPopup"
+                           PlacementTarget="{Binding ElementName=ColorPaletteButton}"
+                           Placement="Bottom"
+                           StaysOpen="False"
+                           AllowsTransparency="True">
+                        <Border Background="#FFFFFFFF"
+                                BorderBrush="#FFE0E0E0"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource CornerRadius.Medium}"
+                                Padding="{StaticResource Spacing.Medium}"
+                                Margin="4">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.15" />
+                            </Border.Effect>
+                            <WrapPanel Width="154">
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Yellow.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Yellow}" ToolTip="经典黄" />
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Green.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Green}" ToolTip="清新绿" />
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Pink.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Pink}" ToolTip="柔和粉" />
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Purple.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Purple}" ToolTip="梦幻紫" />
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Blue.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Blue}" ToolTip="天空蓝" />
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Gray.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Gray}" ToolTip="浅灰白" />
+                                <Button Width="32" Height="32" Margin="4" Background="{StaticResource Sticky.Charcoal.BgBrush}" BorderThickness="0" Click="ColorSelected_Click" Tag="{x:Static models:NoteColor.Charcoal}" ToolTip="暗黑夜间" />
+                            </WrapPanel>
+                        </Border>
+                    </Popup>
+
+                    <!-- 删除按钮 -->
+                    <ui:Button Appearance="Transparent"
+                               ToolTip="删除便签"
+                               Padding="6,4"
+                               Click="DeleteButton_Click">
+                        <ui:SymbolIcon Symbol="Delete20" FontSize="16" Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                    </ui:Button>
+
+                    <!-- 关闭窗口按钮（仅收起，保留便签） -->
+                    <ui:Button Appearance="Transparent"
+                               ToolTip="关闭便签窗口"
+                               Padding="6,4"
+                               Click="CloseButton_Click">
+                        <ui:SymbolIcon Symbol="Dismiss20" FontSize="16" Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                    </ui:Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 正文多行流畅编辑区 -->
+        <TextBox x:Name="EditorTextBox"
+                 Grid.Row="1"
+                 Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Disabled"
+                 IsInactiveSelectionHighlightEnabled="True"
+                 SelectionBrush="#0078D7"
+                 FontSize="14"
+                 FontFamily="Segoe UI, Microsoft YaHei UI, SimSun"
+                 Padding="12,8,12,12" />
+    </Grid>
+</Window>

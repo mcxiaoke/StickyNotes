@@ -1,0 +1,26 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters="clr-namespace:StickyNotes.Converters">
+
+    <!-- 转换器实例注册 -->
+    <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+    <converters:FriendlyDateTimeConverter x:Key="FriendlyDateTimeConverter" />
+    <converters:NoteColorToBackgroundBrushConverter x:Key="NoteColorToBgConverter" />
+    <converters:NoteColorToToolbarBrushConverter x:Key="NoteColorToToolbarConverter" />
+    <converters:NoteColorToTextBrushConverter x:Key="NoteColorToTextConverter" />
+
+    <!-- 统一设计间距规范（Design Tokens） -->
+    <Thickness x:Key="Spacing.None">0</Thickness>
+    <Thickness x:Key="Spacing.Small">4</Thickness>
+    <Thickness x:Key="Spacing.Medium">8</Thickness>
+    <Thickness x:Key="Spacing.Large">12</Thickness>
+    <Thickness x:Key="Spacing.XLarge">16</Thickness>
+    <Thickness x:Key="Spacing.PageMargin">16,12,16,16</Thickness>
+
+    <!-- 统一控件圆角规范 -->
+    <CornerRadius x:Key="CornerRadius.Small">4</CornerRadius>
+    <CornerRadius x:Key="CornerRadius.Medium">8</CornerRadius>
+    <CornerRadius x:Key="CornerRadius.Large">12</CornerRadius>
+
+</ResourceDictionary>

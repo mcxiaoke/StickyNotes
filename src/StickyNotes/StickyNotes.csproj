@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon Condition="Exists('Resources/App.ico')">Resources/App.ico</ApplicationIcon>
+    <RootNamespace>StickyNotes</RootNamespace>
+    <AssemblyName>StickyNotes</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 核心轻量依赖 -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="WPF-UI" Version="3.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>
