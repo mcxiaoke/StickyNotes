@@ -179,9 +179,17 @@
             <Grid Grid.Row="3">
                 <!-- 普通列表模式：一体化通体原色 Fluent 便签卡片流 -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              CanContentScroll="True"
                               Visibility="{Binding IsSearching, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                    <StackPanel>
-                        <ItemsControl ItemsSource="{Binding FilteredNotes}">
+                    <ItemsControl ItemsSource="{Binding FilteredNotes}"
+                                  VirtualizingStackPanel.IsVirtualizing="True"
+                                  VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                  VirtualizingStackPanel.ScrollUnit="Pixel">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type models:Note}">
                                     <!-- 一体化高雅卡片：通体原色融合，自适应 1~4 行纯文本，支持悬浮上浮效果 -->
@@ -335,31 +343,29 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-
-
-                        <!-- 空状态引导视图 -->
-                        <StackPanel HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Margin="0,80,0,0"
-                                    Visibility="{Binding HasNoNotes, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <ui:SymbolIcon Symbol="Note24" FontSize="48" Foreground="{StaticResource Fluent.TextTertiaryBrush}" Margin="0,0,0,12" />
-                            <TextBlock Text="还没有任何便签"
-                                       Style="{StaticResource Type.Subtitle}"
-                                       Foreground="{StaticResource Fluent.TextSecondaryBrush}"
-                                       HorizontalAlignment="Center" />
-                            <TextBlock Text="点击上方“新建便签”随时记录你的灵感与任务"
-                                       Style="{StaticResource Type.Caption}"
-                                       Foreground="{StaticResource Fluent.TextTertiaryBrush}"
-                                       Margin="0,6,0,16"
-                                       HorizontalAlignment="Center" />
-                            <ui:Button Appearance="Secondary"
-                                       Icon="Add24"
-                                       Content="立即创建第一张便签"
-                                       HorizontalAlignment="Center"
-                                       Command="{Binding NewNoteCommand}" />
-                        </StackPanel>
-                    </StackPanel>
                 </ScrollViewer>
+
+                <!-- 空状态引导视图：绝对居中于列表区 -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsHitTestVisible="{Binding HasNoNotes}"
+                            Visibility="{Binding HasNoNotes, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ui:SymbolIcon Symbol="Note24" FontSize="48" Foreground="{StaticResource Fluent.TextTertiaryBrush}" Margin="0,0,0,12" />
+                    <TextBlock Text="还没有任何便签"
+                               Style="{StaticResource Type.Subtitle}"
+                               Foreground="{StaticResource Fluent.TextSecondaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="点击上方“新建便签”随时记录你的灵感与任务"
+                               Style="{StaticResource Type.Caption}"
+                               Foreground="{StaticResource Fluent.TextTertiaryBrush}"
+                               Margin="0,6,0,16"
+                               HorizontalAlignment="Center" />
+                    <ui:Button Appearance="Secondary"
+                               Icon="Add24"
+                               Content="立即创建第一张便签"
+                               HorizontalAlignment="Center"
+                               Command="{Binding NewNoteCommand}" />
+                </StackPanel>
 
                 <!-- 搜索模式视图：精准跳行与清晰命中 -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -416,15 +422,50 @@
                                                 </Border>
                                             </Grid>
 
-                                            <!-- 上下文行预览 -->
+                                            <!-- 上下文行预览 (支持关键词高亮) -->
                                             <Border Grid.Row="1"
                                                     Background="{StaticResource Fluent.WindowBgBrush}"
                                                     CornerRadius="{StaticResource CornerRadius.Small}"
                                                     Padding="10,6"
                                                     Margin="0,8,0,0">
-                                                <TextBlock Text="{Binding LineSnippet}"
-                                                           Style="{StaticResource Type.Body}"
-                                                           Foreground="{StaticResource Fluent.TextPrimaryBrush}" />
+                                                <ItemsControl ItemsSource="{Binding Segments}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type models:SnippetSegment}">
+                                                            <Border CornerRadius="3"
+                                                                    Padding="2,0"
+                                                                    Margin="1,0">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border">
+                                                                        <Setter Property="Background" Value="Transparent" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsHit}" Value="True">
+                                                                                <Setter Property="Background" Value="{StaticResource Fluent.AccentLightBgBrush}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <TextBlock Text="{Binding Text}">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
+                                                                            <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsHit}" Value="True">
+                                                                                    <Setter Property="Foreground" Value="{StaticResource Fluent.AccentBrush}" />
+                                                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
                                             </Border>
                                         </Grid>
                                     </Border>

@@ -59,6 +59,18 @@ public partial class NoteViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// 交互式调整当前便签显示字号 (支持 Ctrl+滚轮缩放，限制在 10 ~ 36 pt)
+    /// </summary>
+    public void ChangeFontSize(double delta)
+    {
+        double newSize = Math.Clamp(FontSize + delta, 10.0, 36.0);
+        if (Math.Abs(FontSize - newSize) > 0.1)
+        {
+            _settingsService.SetEditorFontSize(newSize);
+        }
+    }
+
     public void Initialize(Note note)
     {
         Note = note;

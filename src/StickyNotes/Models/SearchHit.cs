@@ -1,4 +1,12 @@
+using System;
+using System.Collections.Generic;
+
 namespace StickyNotes.Models;
+
+/// <summary>
+/// 文本分段（用于搜索高亮渲染）
+/// </summary>
+public sealed record SnippetSegment(string Text, bool IsHit);
 
 /// <summary>
 /// 搜索命中项模型（用于搜索卡片呈现与跳行定位，不持久化）
@@ -11,5 +19,9 @@ public sealed record SearchHit(
     int CharIndex,         // 命中词在 Content 中的绝对起始字符索引
     int Length,            // 命中关键字长度
     string LineSnippet,    // 所在行前后摘要
-    string HighlightText   // 实际命中的文字
-);
+    string HighlightText,  // 实际命中的文字
+    IReadOnlyList<SnippetSegment>? Segments = null // 高亮分段
+)
+{
+    public IReadOnlyList<SnippetSegment> Segments { get; init; } = Segments ?? Array.Empty<SnippetSegment>();
+}

@@ -101,10 +101,27 @@ public partial class App : Application
             windowManager.OpenOrActivateNote(note);
         }
 
-        // 8. 显示管理中心主窗口
+        // 8. 保持后台托盘常驻模式
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // 9. 初始化系统托盘图标与全局快捷键
+        _serviceProvider.GetRequiredService<TrayIconService>().Initialize();
+        _serviceProvider.GetRequiredService<HotKeyService>().Initialize();
+
+        // 10. 管理中心主窗口呈现（若携带 --autostart 或 --minimized 参数，则保持托盘静默不弹窗）
         var mainWindow = _serviceProvider.GetRequiredService<NotesListWindow>();
         MainWindow = mainWindow;
-        mainWindow.Show();
+
+        bool startMinimized = e.Args.Any(a => a.Equals("--autostart", StringComparison.OrdinalIgnoreCase) || 
+                                              a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+        if (!startMinimized)
+        {
+            mainWindow.Show();
+        }
+        else
+        {
+            AppLog.Info("[App] 检测到自启动参数 (--autostart/--minimized)，主窗口保持在后台托盘");
+        }
     }
 
     private void OnSessionEnding(object? sender, SessionEndingEventArgs e)
@@ -142,6 +159,9 @@ public partial class App : Application
         SystemEvents.SessionEnding -= OnSessionEnding;
         PerformSafeShutdown();
 
+        _serviceProvider?.GetService<TrayIconService>()?.Dispose();
+        _serviceProvider?.GetService<HotKeyService>()?.Dispose();
+
         if (_serviceProvider is IDisposable disp)
         {
             disp.Dispose();
@@ -165,6 +185,9 @@ public partial class App : Application
         services.AddSingleton<AutoSaveCoordinator>(sp => 
             new AutoSaveCoordinator(sp.GetRequiredService<INoteRepository>()));
         services.AddSingleton<WindowManager>();
+        services.AddSingleton<AutoStartService>();
+        services.AddSingleton<HotKeyService>();
+        services.AddSingleton<TrayIconService>();
 
         // ViewModels
         services.AddSingleton<NotesListViewModel>();

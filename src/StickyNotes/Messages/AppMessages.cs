@@ -77,3 +77,11 @@ public sealed class NewNoteRequestedMessage { }
 /// 请求唤醒并呈现便签主列表窗口消息（跨窗口解耦）
 /// </summary>
 public sealed class ShowNotesListRequestedMessage { }
+
+/// <summary>
+/// 全局快捷键启用状态变更消息
+/// </summary>
+public sealed class HotKeyConfigChangedMessage : ValueChangedMessage<bool>
+{
+    public HotKeyConfigChangedMessage(bool enabled) : base(enabled) { }
+}

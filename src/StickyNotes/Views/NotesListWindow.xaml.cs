@@ -3,8 +3,11 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using CommunityToolkit.Mvvm.Messaging;
 using StickyNotes.Infrastructure;
+using StickyNotes.Messages;
 using StickyNotes.Models;
+using StickyNotes.Services;
 using StickyNotes.ViewModels;
 
 namespace StickyNotes.Views;
@@ -14,12 +17,15 @@ namespace StickyNotes.Views;
 /// </summary>
 public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 {
+    private readonly SettingsService? _settingsService;
+
     public NotesListViewModel ViewModel => (NotesListViewModel)DataContext;
 
-    public NotesListWindow(NotesListViewModel viewModel)
+    public NotesListWindow(NotesListViewModel viewModel, SettingsService? settingsService = null)
     {
         InitializeComponent();
         DataContext = viewModel;
+        _settingsService = settingsService;
 
         Loaded += async (_, _) =>
         {
@@ -27,10 +33,31 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             await ViewModel.LoadNotesAsync();
         };
 
-        Closing += (_, _) =>
+        Closing += (s, e) =>
         {
             SaveWindowPlacement();
+            if (!App.IsShuttingDown && (_settingsService?.MinimizeToTrayOnClose ?? true))
+            {
+                e.Cancel = true;
+                Hide();
+            }
         };
+
+        WeakReferenceMessenger.Default.Register<ShowNotesListRequestedMessage>(this, (_, _) =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+                Show();
+                Activate();
+                Topmost = true;
+                Topmost = false;
+                Focus();
+            });
+        });
 
         KeyDown += (s, e) =>
         {

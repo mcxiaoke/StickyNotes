@@ -184,6 +184,16 @@ public partial class NoteWindow : Window
         Close();
     }
 
+    private void NoteWindow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            e.Handled = true;
+            double step = e.Delta > 0 ? 1.0 : -1.0;
+            ViewModel.ChangeFontSize(step);
+        }
+    }
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_NCHITTEST = 0x0084;

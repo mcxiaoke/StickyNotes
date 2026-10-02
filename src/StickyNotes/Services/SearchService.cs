@@ -21,17 +21,21 @@ public sealed class SearchService : ISearchService
             if (string.IsNullOrEmpty(content)) continue;
 
             int searchStart = 0;
+            int lastNewlineScanIndex = 0;
+            int currentLineNumber = 1;
+
             while (searchStart < content.Length)
             {
                 int matchIndex = content.IndexOf(trimmed, searchStart, StringComparison.OrdinalIgnoreCase);
                 if (matchIndex < 0) break;
 
-                // 1. 统计命中位置前面的换行符数量，计算 1-based 逻辑行号
-                int lineNumber = 1;
-                for (int i = 0; i < matchIndex; i++)
+                // 1. 增量统计换行符，将复杂度降至单次 O(n)
+                for (int i = lastNewlineScanIndex; i < matchIndex; i++)
                 {
-                    if (content[i] == '\n') lineNumber++;
+                    if (content[i] == '\n') currentLineNumber++;
                 }
+                lastNewlineScanIndex = matchIndex;
+                int lineNumber = currentLineNumber;
 
                 // 2. 提取命中所在行的完整文本
                 int lineStart = content.LastIndexOf('\n', Math.Max(matchIndex - 1, 0));
@@ -52,6 +56,8 @@ public sealed class SearchService : ISearchService
                     snippet = "..." + lineText.Substring(subStart, subLen) + "...";
                 }
 
+                var segments = BuildSegments(snippet, trimmed);
+
                 results.Add(new SearchHit(
                     NoteId: note.Id,
                     NoteTitle: note.DisplayTitle,
@@ -60,7 +66,8 @@ public sealed class SearchService : ISearchService
                     CharIndex: matchIndex,
                     Length: trimmed.Length,
                     LineSnippet: snippet,
-                    HighlightText: content.Substring(matchIndex, trimmed.Length)
+                    HighlightText: content.Substring(matchIndex, trimmed.Length),
+                    Segments: segments
                 ));
 
                 // 推进游标，保证支持重叠词和同行多次命中
@@ -69,5 +76,37 @@ public sealed class SearchService : ISearchService
         }
 
         return results;
+    }
+
+    public static List<SnippetSegment> BuildSegments(string snippet, string keyword)
+    {
+        var segments = new List<SnippetSegment>();
+        if (string.IsNullOrEmpty(snippet)) return segments;
+        if (string.IsNullOrEmpty(keyword))
+        {
+            segments.Add(new SnippetSegment(snippet, false));
+            return segments;
+        }
+
+        int start = 0;
+        while (start < snippet.Length)
+        {
+            int idx = snippet.IndexOf(keyword, start, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+            {
+                segments.Add(new SnippetSegment(snippet[start..], false));
+                break;
+            }
+
+            if (idx > start)
+            {
+                segments.Add(new SnippetSegment(snippet[start..idx], false));
+            }
+
+            segments.Add(new SnippetSegment(snippet.Substring(idx, keyword.Length), true));
+            start = idx + keyword.Length;
+        }
+
+        return segments;
     }
 }
