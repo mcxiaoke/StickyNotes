@@ -116,7 +116,15 @@ public partial class NoteViewModel : ObservableObject
     [RelayCommand]
     public async Task DeleteAsync()
     {
-        await _autoSaveCoordinator.FlushAsync(Note.Id);
+        // 1. 内存实体标记为已删除与已关闭
+        Note.IsDeleted = true;
+        Note.IsOpen = false;
+        Note.UpdatedAt = DateTime.UtcNow;
+
+        // 2. 取消防抖待写入队列中的旧数据，防止异步覆写
+        _autoSaveCoordinator.CancelPendingSave(Note.Id);
+
+        // 3. 执行数据库归档持久化与广播
         await _repository.ArchiveNoteAsync(Note.Id);
         WeakReferenceMessenger.Default.Send(new NoteArchivedMessage(Note.Id));
     }
@@ -126,6 +134,9 @@ public partial class NoteViewModel : ObservableObject
     /// </summary>
     public async Task FlushSaveAsync()
     {
+        // 已归档/已删除便签禁止执行回写保存
+        if (Note.IsDeleted) return;
+
         await _autoSaveCoordinator.FlushAsync(Note.Id);
         await _repository.SaveAsync(Note);
         WeakReferenceMessenger.Default.Send(new NoteContentChangedMessage(Note.Id, Note.PreviewText, Note.UpdatedAt));

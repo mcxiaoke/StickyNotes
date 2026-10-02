@@ -215,7 +215,7 @@
                                                HorizontalAlignment="Stretch"
                                                HorizontalContentAlignment="Left"
                                                Icon="AppsListDetail20"
-                                               Content="彩色便签 (Ctrl+H)"
+                                               Content="便签列表 (Ctrl+H)"
                                                FontSize="13"
                                                Padding="8,6"
                                                Click="ShowNotesList_Click" />

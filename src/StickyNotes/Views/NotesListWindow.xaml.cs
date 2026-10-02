@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.Messaging;
 using StickyNotes.Infrastructure;
 using StickyNotes.Messages;
@@ -45,7 +46,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 
         WeakReferenceMessenger.Default.Register<ShowNotesListRequestedMessage>(this, (_, _) =>
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
                 if (WindowState == WindowState.Minimized)
                 {
@@ -53,9 +54,14 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 }
                 Show();
                 Activate();
-                Topmost = true;
-                Topmost = false;
                 Focus();
+
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+                    NativeMethods.SetForegroundWindow(hwnd);
+                }
             });
         });
 

@@ -215,6 +215,75 @@ public class FeaturesAndPerformanceTests
         });
     }
 
+    /// <summary>
+    /// 验证从单个便签窗口归档后，随后的窗口关闭 FlushSaveAsync 不会覆写归档标记
+    /// </summary>
+    [TestMethod]
+    public async Task P2_NoteWindow_Archive_PersistsIsDeleted_DoesNotGetOverwrittenOnWindowClose()
+    {
+        var repo = new FakeNoteRepository();
+        var coordinator = new AutoSaveCoordinator(repo);
+        var note = new Note
+        {
+            Id = Guid.NewGuid(),
+            Content = "待归档便签测试",
+            Color = NoteColor.Green,
+            IsOpen = true,
+            IsDeleted = false
+        };
+        await repo.SaveAsync(note);
+
+        var vm = new NoteViewModel(repo, coordinator);
+        vm.Initialize(note);
+
+        // 1. 用户在便签菜单点击归档
+        await vm.DeleteAsync();
+
+        // 2. 模拟便签窗口 Closing 触发的无条件 FlushSaveAsync
+        await vm.FlushSaveAsync();
+
+        // 3. 验证数据库中便签依然保持归档状态
+        var persisted = await repo.GetByIdAsync(note.Id);
+        Assert.IsNotNull(persisted);
+        Assert.IsTrue(persisted.IsDeleted, "归档后即便窗口关闭 Flush，也绝不能被 SaveAsync 覆写为未删除");
+        Assert.IsFalse(persisted.IsOpen, "归档后便签窗口状态必须为关闭 (IsOpen = false)");
+
+        var activeNotes = await repo.GetAllActiveAsync();
+        Assert.IsFalse(activeNotes.Any(n => n.Id == note.Id), "活跃便签列表中不应再包含已归档便签（重启后不弹窗）");
+
+        var archivedNotes = await repo.GetAllArchivedAsync();
+        Assert.IsTrue(archivedNotes.Any(n => n.Id == note.Id), "已归档列表中必须能正确查到该便签");
+        coordinator.Dispose();
+    }
+
+    /// <summary>
+    /// 验证 WindowManager 的 OpenOrActivateNotesListWindow 可正常唤醒主管理窗口
+    /// </summary>
+    [TestMethod]
+    public void P2_WindowManager_OpenOrActivateNotesListWindow_Activation()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var coordinator = new AutoSaveCoordinator(repo);
+            var search = new SearchService();
+            var wm = new WindowManager(null!, repo);
+            var listVm = new NotesListViewModel(repo, search, wm);
+            var listWin = new Views.NotesListWindow(listVm);
+
+            listWin.WindowState = WindowState.Minimized;
+            listWin.Hide();
+
+            // 发送唤醒消息
+            WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
+
+            // 验证窗口状态被恢复
+            Assert.AreEqual(WindowState.Normal, listWin.WindowState);
+            listWin.Close();
+            coordinator.Dispose();
+        });
+    }
+
     private class FakeNoteRepository : INoteRepository
     {
         public List<Note> Notes { get; set; } = new();
