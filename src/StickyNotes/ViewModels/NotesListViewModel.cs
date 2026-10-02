@@ -91,25 +91,13 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
             var app = System.Windows.Application.Current;
             if (app != null)
             {
-                Action showAction = () =>
-                {
-                    var mainWin = app.MainWindow;
-                    if (mainWin != null)
-                    {
-                        if (mainWin.WindowState == System.Windows.WindowState.Minimized)
-                            mainWin.WindowState = System.Windows.WindowState.Normal;
-                        mainWin.Show();
-                        mainWin.Activate();
-                    }
-                };
-
                 if (app.Dispatcher.CheckAccess())
                 {
-                    showAction();
+                    _windowManager.OpenOrActivateNotesListWindow();
                 }
                 else
                 {
-                    app.Dispatcher.InvokeAsync(showAction);
+                    app.Dispatcher.InvokeAsync(() => _windowManager.OpenOrActivateNotesListWindow());
                 }
             }
         });
@@ -236,6 +224,9 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task DeleteNoteAsync(Note note)
     {
+        note.IsDeleted = true;
+        note.IsOpen = false;
+        note.UpdatedAt = DateTime.UtcNow;
         _windowManager.CloseNoteWindow(note.Id);
         await _repository.ArchiveNoteAsync(note.Id);
         Notes.Remove(note);

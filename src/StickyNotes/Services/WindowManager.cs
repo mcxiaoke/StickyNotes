@@ -134,6 +134,80 @@ public sealed class WindowManager
         }
     }
 
+    private NotesListWindow? _notesListWindow;
+
+    /// <summary>
+    /// 打开或激活便签主列表窗口（无论最小化、隐藏在托盘还是尚未显示，均可平滑唤醒并置前）
+    /// </summary>
+    public NotesListWindow? OpenOrActivateNotesListWindow()
+    {
+        if (_notesListWindow != null && _notesListWindow.IsLoaded)
+        {
+            if (_notesListWindow.WindowState == WindowState.Minimized)
+                _notesListWindow.WindowState = WindowState.Normal;
+            _notesListWindow.Show();
+            _notesListWindow.Activate();
+            _notesListWindow.Focus();
+
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(_notesListWindow).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+                NativeMethods.SetForegroundWindow(hwnd);
+            }
+            return _notesListWindow;
+        }
+
+        if (_serviceProvider != null)
+        {
+            _notesListWindow = _serviceProvider.GetService<NotesListWindow>();
+            if (_notesListWindow != null)
+            {
+                _notesListWindow.Closed += (_, _) => _notesListWindow = null;
+                if (_notesListWindow.WindowState == WindowState.Minimized)
+                    _notesListWindow.WindowState = WindowState.Normal;
+                _notesListWindow.Show();
+                _notesListWindow.Activate();
+                _notesListWindow.Focus();
+
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(_notesListWindow).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+                    NativeMethods.SetForegroundWindow(hwnd);
+                }
+                return _notesListWindow;
+            }
+        }
+
+        var app = Application.Current;
+        if (app != null)
+        {
+            foreach (Window win in app.Windows)
+            {
+                if (win is NotesListWindow nlw)
+                {
+                    _notesListWindow = nlw;
+                    if (nlw.WindowState == WindowState.Minimized)
+                        nlw.WindowState = WindowState.Normal;
+                    nlw.Show();
+                    nlw.Activate();
+                    nlw.Focus();
+
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(nlw).Handle;
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+                        NativeMethods.SetForegroundWindow(hwnd);
+                    }
+                    return nlw;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// 关闭指定便签窗口（用于删除便签时）
     /// </summary>
@@ -141,6 +215,8 @@ public sealed class WindowManager
     {
         if (_activeNoteWindows.TryGetValue(noteId, out var win))
         {
+            win.ViewModel.Note.IsDeleted = true;
+            win.ViewModel.Note.IsOpen = false;
             win.Close();
         }
     }

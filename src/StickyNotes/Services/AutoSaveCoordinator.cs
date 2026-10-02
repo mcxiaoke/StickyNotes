@@ -77,6 +77,18 @@ public sealed class AutoSaveCoordinator : IDisposable
     }
 
     /// <summary>
+    /// 取消并废弃指定便签的待执行保存（用于便签归档、彻底删除时）
+    /// </summary>
+    public void CancelPendingSave(Guid noteId)
+    {
+        if (_pendingTasks.TryRemove(noteId, out var info))
+        {
+            info.Cts.Cancel();
+            info.Cts.Dispose();
+        }
+    }
+
+    /// <summary>
     /// 强制立即执行指定便签的落盘保存（用于失焦、窗口关闭时）
     /// </summary>
     public async Task FlushAsync(Guid noteId)

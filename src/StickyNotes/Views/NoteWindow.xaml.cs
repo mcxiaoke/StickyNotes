@@ -120,8 +120,11 @@ public partial class NoteWindow : Window
     private void ShowNotesList_Click(object sender, RoutedEventArgs e)
     {
         MoreMenuPopup.IsOpen = false;
-        // 触发唤醒主管理窗口解耦消息
-        WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
+        // 调度至 Normal 优先级异步执行，确保 Popup 关闭完成并释放焦点后，再唤醒并置前主列表窗口
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
+        });
     }
 
     private async void ColorSelected_Click(object sender, RoutedEventArgs e)
@@ -168,6 +171,7 @@ public partial class NoteWindow : Window
 
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
+        MoreMenuPopup.IsOpen = false;
         await ViewModel.DeleteAsync();
         Close();
     }
