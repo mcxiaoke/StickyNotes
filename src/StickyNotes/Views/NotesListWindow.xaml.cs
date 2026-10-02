@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using StickyNotes.Infrastructure;
 using StickyNotes.Models;
 using StickyNotes.ViewModels;
 
@@ -55,6 +57,33 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 }
             }
         };
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        if (PresentationSource.FromVisual(this) is HwndSource source)
+        {
+            source.AddHook(WndProc);
+        }
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == NativeMethods.WM_ACTIVATE_INSTANCE && NativeMethods.WM_ACTIVATE_INSTANCE != 0)
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+            Show();
+            Activate();
+            Topmost = true;
+            Topmost = false;
+            Focus();
+            handled = true;
+        }
+        return IntPtr.Zero;
     }
 
     private void FilterAllRadio_Checked(object sender, RoutedEventArgs e)
@@ -145,7 +174,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (e.Key == Key.Enter && ViewModel.SearchResults.Count > 0)
         {
-            ViewModel.SelectSearchHitCommand.Execute(ViewModel.SearchResults[0]);
+            ViewModel.JumpToSearchHitCommand.Execute(ViewModel.SearchResults[0]);
             e.Handled = true;
         }
     }
@@ -154,7 +183,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender is FrameworkElement { DataContext: SearchHit hit })
         {
-            ViewModel.SelectSearchHitCommand.Execute(hit);
+            ViewModel.JumpToSearchHitCommand.Execute(hit);
         }
     }
 

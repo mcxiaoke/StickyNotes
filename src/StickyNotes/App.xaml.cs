@@ -28,14 +28,15 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        // 1. 单实例互斥量保护（防止多开进程锁死 SQLite）
-        const string mutexName = "Global\\StickyNotes_App_Instance_Mutex_mcxiaoke";
+        // 1. 单实例互斥量保护（基于数据路径哈希区分隔离，防止多开进程锁死 SQLite）
+        var dataDirHash = (AppPaths.DataDirectory?.ToLowerInvariant() ?? "").GetHashCode().ToString("X8");
+        var mutexName = $@"Local\StickyNotes_{dataDirHash}";
         _instanceMutex = new Mutex(true, mutexName, out bool isNew);
 
         if (!isNew)
         {
-            // 唤醒已有实例并退出当前进程
-            NativeMethods.BringExistingInstanceToFront();
+            // 广播唤醒已有实例并退出当前进程
+            NativeMethods.NotifyExistingInstance();
             Shutdown();
             return;
         }
@@ -175,31 +176,5 @@ public partial class App : Application
         services.AddSingleton<NotesListWindow>();
         services.AddTransient<ArchivedNotesWindow>();
         services.AddTransient<SettingsWindow>();
-    }
-}
-
-internal static class NativeMethods
-{
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    private const int SW_RESTORE = 9;
-
-    public static void BringExistingInstanceToFront()
-    {
-        var hWnd = FindWindow(null, "彩色便签");
-        if (hWnd != IntPtr.Zero)
-        {
-            ShowWindow(hWnd, SW_RESTORE);
-            SetForegroundWindow(hWnd);
-        }
     }
 }

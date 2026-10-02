@@ -27,7 +27,16 @@ public partial class NoteViewModel : ObservableObject
     private NoteColor _color = NoteColor.Yellow;
 
     [ObservableProperty]
-    private bool _isPinned;
+    private bool _alwaysOnTop;
+
+    /// <summary>
+    /// 兼容旧属性绑定
+    /// </summary>
+    public bool IsPinned
+    {
+        get => AlwaysOnTop;
+        set => AlwaysOnTop = value;
+    }
 
     [ObservableProperty]
     private double _fontSize = 14.0;
@@ -50,13 +59,12 @@ public partial class NoteViewModel : ObservableObject
         });
     }
 
-
     public void Initialize(Note note)
     {
         Note = note;
         Content = note.Content;
         Color = note.Color;
-        IsPinned = note.IsPinned;
+        AlwaysOnTop = note.AlwaysOnTop;
     }
 
     partial void OnContentChanged(string value)
@@ -68,18 +76,19 @@ public partial class NoteViewModel : ObservableObject
         _autoSaveCoordinator.ScheduleSave(Note, async n =>
         {
             await _repository.SaveAsync(n);
-            WeakReferenceMessenger.Default.Send(new NoteUpdatedMessage(n));
+            // 发送正文变更轻量消息（不触发列表重排抖动）
+            WeakReferenceMessenger.Default.Send(new NoteContentChangedMessage(n.Id, n.Content, n.UpdatedAt));
         });
     }
 
     [RelayCommand]
     public async Task TogglePinAsync()
     {
-        IsPinned = !IsPinned;
-        Note.IsPinned = IsPinned;
+        AlwaysOnTop = !AlwaysOnTop;
+        Note.AlwaysOnTop = AlwaysOnTop;
         Note.UpdatedAt = DateTime.UtcNow;
         await _repository.SaveAsync(Note);
-        WeakReferenceMessenger.Default.Send(new NoteUpdatedMessage(Note));
+        WeakReferenceMessenger.Default.Send(new NoteMetaChangedMessage(Note));
     }
 
     [RelayCommand]
@@ -89,7 +98,7 @@ public partial class NoteViewModel : ObservableObject
         Note.Color = newColor;
         Note.UpdatedAt = DateTime.UtcNow;
         await _repository.SaveAsync(Note);
-        WeakReferenceMessenger.Default.Send(new NoteUpdatedMessage(Note));
+        WeakReferenceMessenger.Default.Send(new NoteMetaChangedMessage(Note));
     }
 
     [RelayCommand]
@@ -100,7 +109,6 @@ public partial class NoteViewModel : ObservableObject
         WeakReferenceMessenger.Default.Send(new NoteArchivedMessage(Note.Id));
     }
 
-
     /// <summary>
     /// 立即强制刷盘当前便签
     /// </summary>
@@ -108,6 +116,6 @@ public partial class NoteViewModel : ObservableObject
     {
         await _autoSaveCoordinator.FlushAsync(Note.Id);
         await _repository.SaveAsync(Note);
-        WeakReferenceMessenger.Default.Send(new NoteUpdatedMessage(Note));
+        WeakReferenceMessenger.Default.Send(new NoteContentChangedMessage(Note.Id, Note.PreviewText, Note.UpdatedAt));
     }
 }
