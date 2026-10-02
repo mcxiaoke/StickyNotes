@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using StickyNotes.Data;
+using StickyNotes.Infrastructure;
 using StickyNotes.Models;
 
 namespace StickyNotes.Services;
@@ -9,6 +11,7 @@ namespace StickyNotes.Services;
 public sealed class AutoSaveCoordinator : IDisposable
 {
     private readonly int _debounceMilliseconds;
+    private readonly INoteRepository? _repository;
     private readonly ConcurrentDictionary<Guid, SaveTaskInfo> _pendingTasks = new();
 
     private sealed class SaveTaskInfo
@@ -18,8 +21,9 @@ public sealed class AutoSaveCoordinator : IDisposable
         public CancellationTokenSource Cts { get; set; } = null!;
     }
 
-    public AutoSaveCoordinator(int debounceMilliseconds = 500)
+    public AutoSaveCoordinator(INoteRepository? repository = null, int debounceMilliseconds = 500)
     {
+        _repository = repository;
         _debounceMilliseconds = debounceMilliseconds;
     }
 
@@ -67,7 +71,7 @@ public sealed class AutoSaveCoordinator : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[AutoSaveCoordinator] 自动保存失败: {ex.Message}");
+                AppLog.Error($"[AutoSaveCoordinator] 自动保存失败: {ex.Message}", ex);
             }
         });
     }
@@ -100,6 +104,37 @@ public sealed class AutoSaveCoordinator : IDisposable
         foreach (var key in keys)
         {
             await FlushAsync(key);
+        }
+    }
+
+    /// <summary>
+    /// 退出/关机时专用：直接持久化所有脏便签至底层存储，绕过 UI 消息总线，防止死锁
+    /// </summary>
+    public void FlushAllDirectToStorage()
+    {
+        var tasks = _pendingTasks.Values.ToList();
+        _pendingTasks.Clear();
+
+        foreach (var info in tasks)
+        {
+            try
+            {
+                info.Cts.Cancel();
+                info.Cts.Dispose();
+
+                if (_repository != null)
+                {
+                    _repository.SaveAsync(info.Note).ConfigureAwait(false).GetAwaiter().GetResult();
+                }
+                else
+                {
+                    info.SaveAction(info.Note).ConfigureAwait(false).GetAwaiter().GetResult();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[AutoSaveCoordinator] 退出时持久化便签 {info.Note.Id} 失败: {ex.Message}", ex);
+            }
         }
     }
 
