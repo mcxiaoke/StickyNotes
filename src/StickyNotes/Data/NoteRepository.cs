@@ -164,6 +164,63 @@ public sealed class NoteRepository : INoteRepository
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task SaveBatchAsync(IEnumerable<Note> notes, CancellationToken cancellationToken = default)
+    {
+        var noteList = notes.ToList();
+        if (noteList.Count == 0) return;
+
+        await using var connection = _context.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+
+        const string sql = """
+            INSERT INTO Notes (
+                Id, Content, Color, IsPinned, IsDeleted,
+                WindowX, WindowY, WindowWidth, WindowHeight, IsOpen,
+                CreatedAt, UpdatedAt
+            ) VALUES (
+                $id, $content, $color, $isPinned, $isDeleted,
+                $windowX, $windowY, $windowWidth, $windowHeight, $isOpen,
+                $createdAt, $updatedAt
+            )
+            ON CONFLICT(Id) DO UPDATE SET
+                Content = excluded.Content,
+                Color = excluded.Color,
+                IsPinned = excluded.IsPinned,
+                IsDeleted = excluded.IsDeleted,
+                WindowX = excluded.WindowX,
+                WindowY = excluded.WindowY,
+                WindowWidth = excluded.WindowWidth,
+                WindowHeight = excluded.WindowHeight,
+                IsOpen = excluded.IsOpen,
+                UpdatedAt = excluded.UpdatedAt;
+            """;
+
+        foreach (var note in noteList)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = (SqliteTransaction)tx;
+            command.CommandText = sql;
+
+            command.Parameters.AddWithValue("$id", note.Id.ToString());
+            command.Parameters.AddWithValue("$content", note.Content);
+            command.Parameters.AddWithValue("$color", (int)note.Color);
+            command.Parameters.AddWithValue("$isPinned", note.IsPinned ? 1 : 0);
+            command.Parameters.AddWithValue("$isDeleted", note.IsDeleted ? 1 : 0);
+            command.Parameters.AddWithValue("$windowX", note.WindowX);
+            command.Parameters.AddWithValue("$windowY", note.WindowY);
+            command.Parameters.AddWithValue("$windowWidth", note.WindowWidth);
+            command.Parameters.AddWithValue("$windowHeight", note.WindowHeight);
+            command.Parameters.AddWithValue("$isOpen", note.IsOpen ? 1 : 0);
+            command.Parameters.AddWithValue("$createdAt", note.CreatedAt.ToString("o", CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$updatedAt", note.UpdatedAt.ToString("o", CultureInfo.InvariantCulture));
+
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await tx.CommitAsync(cancellationToken);
+    }
+
     public async Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await ArchiveNoteAsync(id, cancellationToken);

@@ -2,7 +2,9 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 using StickyNotes.Data;
+using StickyNotes.Infrastructure;
 using StickyNotes.Services;
 using StickyNotes.ViewModels;
 using StickyNotes.Views;
@@ -16,6 +18,11 @@ public partial class App : Application
 {
     private static Mutex? _instanceMutex;
     private IServiceProvider? _serviceProvider;
+
+    /// <summary>
+    /// 全局应用是否正在关闭中（用于隔离普通窗口关闭与应用退出）
+    /// </summary>
+    public static bool IsShuttingDown { get; private set; }
 
     public static IServiceProvider Services => ((App)Current)._serviceProvider!;
 
@@ -35,33 +42,55 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        // 2. 捕获未处理异常并记录，防止数据丢失
+        // 2. 注册三层全局异常捕获，记录日志并安全刷盘，杜绝静默崩溃与数据丢失
         DispatcherUnhandledException += (_, args) =>
         {
+            AppLog.Error($"[App] Dispatcher 未处理异常: {args.Exception.Message}", args.Exception);
             try
             {
-                var coordinator = _serviceProvider?.GetService<AutoSaveCoordinator>();
-                coordinator?.FlushAllAsync().GetAwaiter().GetResult();
+                _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
             }
             catch { }
-
-            System.Diagnostics.Debug.WriteLine($"[App] 未处理异常: {args.Exception}");
             args.Handled = true;
         };
 
-        // 3. 构建依赖注入服务容器
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+            {
+                AppLog.Error($"[App] AppDomain 未处理异常: {ex.Message}", ex);
+            }
+            try
+            {
+                _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
+            }
+            catch { }
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            AppLog.Error($"[App] TaskScheduler 未观察异常: {args.Exception.Message}", args.Exception);
+            args.SetObserved();
+        };
+
+        // 3. 监听 Windows 系统关机/注销事件
+        SystemEvents.SessionEnding += OnSessionEnding;
+
+        AppLog.Info($"[App] StickyNotes 启动，环境: {Environment.Version}, OS: {Environment.OSVersion}");
+
+        // 4. 构建依赖注入服务容器
         var services = new ServiceCollection();
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();
 
-        // 4. 初始化数据库与执行 PRAGMA 增量迁移
+        // 5. 初始化数据库与执行 PRAGMA 增量迁移
         var dbCtx = _serviceProvider.GetRequiredService<SqliteDatabaseContext>();
         await dbCtx.InitializeAndMigrateAsync();
 
-        // 5. 每日启动轮转冷备份检查
-        BackupService.RunDailyBackupIfNeeded();
+        // 6. 每日启动冷备份在后台线程异步执行，不阻塞 UI 渲染呈现
+        _ = Task.Run(() => BackupService.RunDailyBackupIfNeeded());
 
-        // 6. 恢复上次未关闭的便签贴纸
+        // 7. 恢复上次未关闭的便签贴纸（保持原位与物理尺寸）
         var repo = _serviceProvider.GetRequiredService<INoteRepository>();
         var windowManager = _serviceProvider.GetRequiredService<WindowManager>();
         var allActive = await repo.GetAllActiveAsync();
@@ -71,23 +100,50 @@ public partial class App : Application
             windowManager.OpenOrActivateNote(note);
         }
 
-        // 7. 显示管理中心主窗口
+        // 8. 显示管理中心主窗口
         var mainWindow = _serviceProvider.GetRequiredService<NotesListWindow>();
         MainWindow = mainWindow;
         mainWindow.Show();
     }
 
-    protected override async void OnExit(ExitEventArgs e)
+    private void OnSessionEnding(object? sender, SessionEndingEventArgs e)
     {
-        // 退出前强制立即将所有便签刷盘
-        if (_serviceProvider != null)
+        AppLog.Info($"[App] 收到操作系统注销/关机通知 ({e.Reason})，立即同步落盘");
+        PerformSafeShutdown();
+    }
+
+    /// <summary>
+    /// 执行应用退出前的统一安全持久化（坐标记忆 + 脏数据刷盘）
+    /// </summary>
+    private void PerformSafeShutdown()
+    {
+        if (IsShuttingDown) return;
+        IsShuttingDown = true;
+
+        try
         {
-            var coordinator = _serviceProvider.GetService<AutoSaveCoordinator>();
-            if (coordinator != null)
-            {
-                await coordinator.FlushAllAsync();
-                coordinator.Dispose();
-            }
+            // 1. 同步持久化当前桌面上所有打开贴纸的精确坐标与尺寸，保持 IsOpen = true
+            _serviceProvider?.GetService<WindowManager>()?.PersistActiveWindowsBoundsOnExit();
+
+            // 2. 将所有待写脏数据直接写入 SQLite，绝不走 UI 消息总线，防止死锁
+            _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
+
+            AppLog.Info("[App] 退出前安全落盘完成");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[App] 退出安全落盘异常: {ex.Message}", ex);
+        }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        SystemEvents.SessionEnding -= OnSessionEnding;
+        PerformSafeShutdown();
+
+        if (_serviceProvider is IDisposable disp)
+        {
+            disp.Dispose();
         }
 
         _instanceMutex?.ReleaseMutex();
@@ -105,7 +161,8 @@ public partial class App : Application
         services.AddSingleton<SettingsService>();
         services.AddSingleton<ExportImportService>();
         services.AddSingleton<ISearchService, SearchService>();
-        services.AddSingleton<AutoSaveCoordinator>();
+        services.AddSingleton<AutoSaveCoordinator>(sp => 
+            new AutoSaveCoordinator(sp.GetRequiredService<INoteRepository>()));
         services.AddSingleton<WindowManager>();
 
         // ViewModels
@@ -119,7 +176,6 @@ public partial class App : Application
         services.AddTransient<ArchivedNotesWindow>();
         services.AddTransient<SettingsWindow>();
     }
-
 }
 
 internal static class NativeMethods

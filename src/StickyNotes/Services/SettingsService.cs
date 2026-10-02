@@ -65,10 +65,9 @@ public sealed class SettingsService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[SettingsService] 保存设置失败: {ex.Message}");
+            AppLog.Warn($"[SettingsService] 保存设置失败: {ex.Message}", ex);
         }
     }
-
 
     private static AppSettings LoadSettings(string path)
     {
@@ -87,7 +86,7 @@ public sealed class SettingsService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[SettingsService] 加载设置失败: {ex.Message}");
+            AppLog.Warn($"[SettingsService] 加载设置失败: {ex.Message}", ex);
         }
 
         return new AppSettings();

@@ -1,6 +1,7 @@
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using StickyNotes.Data;
+using StickyNotes.Infrastructure;
 using StickyNotes.Models;
 using StickyNotes.ViewModels;
 using StickyNotes.Views;
@@ -17,6 +18,7 @@ public sealed class WindowManager
     private readonly Dictionary<Guid, NoteWindow> _activeNoteWindows = new();
     private ArchivedNotesWindow? _archivedNotesWindow;
     private SettingsWindow? _settingsWindow;
+    private bool _isShuttingDown;
 
     public WindowManager(IServiceProvider serviceProvider, INoteRepository repository)
     {
@@ -77,6 +79,11 @@ public sealed class WindowManager
         window.Closed += async (_, _) =>
         {
             _activeNoteWindows.Remove(note.Id);
+
+            // 若应用处于正常退出/关机流程中，跳过此处的 isOpen: false 回写
+            // （退出状态与真实坐标已在 PersistActiveWindowsBoundsOnExit 中可靠持久化，保持 IsOpen = true）
+            if (App.IsShuttingDown || _isShuttingDown) return;
+
             try
             {
                 await _repository.UpdateWindowBoundsAsync(
@@ -90,7 +97,7 @@ public sealed class WindowManager
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[WindowManager] 保存窗口状态失败: {ex.Message}");
+                AppLog.Warn($"[WindowManager] 保存窗口状态失败: {ex.Message}", ex);
             }
         };
 
@@ -98,6 +105,32 @@ public sealed class WindowManager
         window.Show();
         onReady?.Invoke(window);
         return window;
+    }
+
+    /// <summary>
+    /// 应用退出时统一同步当前所有敞开便签的物理坐标、尺寸并保持 IsOpen = true
+    /// </summary>
+    public void PersistActiveWindowsBoundsOnExit()
+    {
+        _isShuttingDown = true;
+        foreach (var (id, win) in _activeNoteWindows)
+        {
+            try
+            {
+                _repository.UpdateWindowBoundsAsync(
+                    id,
+                    win.Left,
+                    win.Top,
+                    win.ActualWidth > 0 ? win.ActualWidth : win.Width,
+                    win.ActualHeight > 0 ? win.ActualHeight : win.Height,
+                    isOpen: true
+                ).ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"[WindowManager] 退出持久化便签窗口 {id} 坐标失败: {ex.Message}", ex);
+            }
+        }
     }
 
     /// <summary>
@@ -146,7 +179,7 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 打开或激活独立设置窗口
+    /// 打开或激活设置窗口
     /// </summary>
     public SettingsWindow OpenOrActivateSettingsWindow()
     {

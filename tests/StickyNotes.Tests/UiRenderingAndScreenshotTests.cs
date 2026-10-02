@@ -39,6 +39,14 @@ public class UiRenderingAndScreenshotTests
             return Task.CompletedTask;
         }
 
+        public async Task SaveBatchAsync(IEnumerable<Note> notes, CancellationToken cancellationToken = default)
+        {
+            foreach (var note in notes)
+            {
+                await SaveAsync(note, cancellationToken);
+            }
+        }
+
         public Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
         {
             return ArchiveNoteAsync(id, cancellationToken);

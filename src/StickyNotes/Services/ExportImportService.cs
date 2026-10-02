@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using StickyNotes.Data;
+using StickyNotes.Infrastructure;
 using StickyNotes.Models;
 
 namespace StickyNotes.Services;
@@ -35,6 +36,11 @@ public sealed class NoteBackupPackage
     public int TotalCount { get; set; }
     public List<NoteBackupItem> Notes { get; set; } = new();
 }
+
+/// <summary>
+/// 便签导入结果统计
+/// </summary>
+public sealed record ImportResult(int Total, int Imported, int Skipped);
 
 /// <summary>
 /// 便签 JSON 导入与导出服务
@@ -84,13 +90,23 @@ public sealed class ExportImportService
 
         var json = JsonSerializer.Serialize(package, JsonOptions);
         await File.WriteAllTextAsync(targetFilePath, json, cancellationToken);
+        AppLog.Info($"[ExportImportService] 成功导出 {package.TotalCount} 条便签至 {targetFilePath}");
         return package.TotalCount;
     }
 
     /// <summary>
-    /// 从 JSON 文件解析并导入便签，支持增量合并与覆盖更新
+    /// 从 JSON 文件解析并导入便签，支持时间戳冲突裁决（较新记录保留）与原子事务批量导入
     /// </summary>
     public async Task<int> ImportNotesAsync(string sourceFilePath, CancellationToken cancellationToken = default)
+    {
+        var result = await ImportNotesWithResultAsync(sourceFilePath, cancellationToken);
+        return result.Imported;
+    }
+
+    /// <summary>
+    /// 从 JSON 文件导入并返回详细统计结果（总数、导入数、因冲突跳过数）
+    /// </summary>
+    public async Task<ImportResult> ImportNotesWithResultAsync(string sourceFilePath, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(sourceFilePath))
             throw new FileNotFoundException("导入的备份文件不存在", sourceFilePath);
@@ -119,14 +135,26 @@ public sealed class ExportImportService
         }
 
         if (items == null || items.Count == 0)
-            return 0;
+            return new ImportResult(0, 0, 0);
 
-        int importedCount = 0;
+        var toSave = new List<Note>();
+        int skippedCount = 0;
+
         foreach (var item in items)
         {
+            var noteId = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+
+            // 冲突裁决：若本地已存在相同 ID 的便签，且本地修改时间不早于备份中的时间，则保留本地最新内容
+            var existing = await _repository.GetByIdAsync(noteId, cancellationToken);
+            if (existing != null && existing.UpdatedAt >= item.UpdatedAt)
+            {
+                skippedCount++;
+                continue;
+            }
+
             var note = new Note
             {
-                Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id,
+                Id = noteId,
                 Content = item.Content ?? string.Empty,
                 Color = item.Color,
                 IsPinned = item.IsPinned,
@@ -140,10 +168,15 @@ public sealed class ExportImportService
                 UpdatedAt = item.UpdatedAt != default ? item.UpdatedAt : DateTime.UtcNow
             };
 
-            await _repository.SaveAsync(note, cancellationToken);
-            importedCount++;
+            toSave.Add(note);
         }
 
-        return importedCount;
+        if (toSave.Count > 0)
+        {
+            await _repository.SaveBatchAsync(toSave, cancellationToken);
+        }
+
+        AppLog.Info($"[ExportImportService] 导入完成：总计 {items.Count} 条，成功导入/更新 {toSave.Count} 条，因本地较新跳过 {skippedCount} 条");
+        return new ImportResult(items.Count, toSave.Count, skippedCount);
     }
 }
