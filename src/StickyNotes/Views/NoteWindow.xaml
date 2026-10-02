@@ -235,7 +235,9 @@
                         </Popup>
 
                         <!-- 关闭按钮（收起贴纸窗口） -->
-                        <Button Style="{StaticResource StickyCloseButtonStyle}"
+                        <Button x:Name="CloseNoteButton"
+                                Style="{StaticResource StickyCloseButtonStyle}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 ToolTip="关闭便签 (Ctrl+W)"
                                 Click="CloseButton_Click">
                             <ui:SymbolIcon Symbol="Dismiss20" FontSize="15"

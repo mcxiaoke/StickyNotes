@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using StickyNotes.Data;
@@ -177,6 +178,40 @@ public class FeaturesAndPerformanceTests
             var trayService = new TrayIconService(windowManager, settingsService);
             trayService.Initialize();
             trayService.Dispose();
+        });
+    }
+
+    /// <summary>
+    /// 验证 NoteWindow 关闭按钮拥有 WindowChrome.IsHitTestVisibleInChrome=true 且点击可正常关闭窗口
+    /// </summary>
+    [TestMethod]
+    public void P2_NoteWindow_CloseButton_IsHitTestVisible_AndClosesWindow()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var coordinator = new AutoSaveCoordinator();
+            var vm = new NoteViewModel(repo, coordinator);
+            var note = new Note { Id = Guid.NewGuid(), Content = "测试便签", Color = NoteColor.Yellow };
+            vm.Initialize(note);
+
+            var win = new Views.NoteWindow(vm);
+            win.Show();
+
+            var closeBtn = win.CloseButtonControl;
+            Assert.IsNotNull(closeBtn, "未找到关闭便签按钮");
+
+            bool isHitTestVisible = System.Windows.Shell.WindowChrome.GetIsHitTestVisibleInChrome(closeBtn);
+            Assert.IsTrue(isHitTestVisible, "关闭按钮必须设置 WindowChrome.IsHitTestVisibleInChrome=true，否则在 Caption 区域会被 DWM 拖拽拦截导致点击失效");
+
+            bool closedFired = false;
+            win.Closed += (_, _) => closedFired = true;
+
+            // 模拟触发按钮 Click 事件
+            closeBtn.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+
+            Assert.IsTrue(closedFired, "点击关闭按钮必须正常触发 Window.Closed 事件收起便签贴纸");
+            coordinator.Dispose();
         });
     }
 
