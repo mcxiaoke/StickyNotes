@@ -1,68 +1,103 @@
 using System.IO;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace StickyNotes.Models;
 
 /// <summary>
-/// 便签核心业务实体
+/// 便签核心业务实体（支持 INotifyPropertyChanged，提供流畅的局部 UI 绑定更新）
 /// </summary>
-public sealed class Note
+public sealed partial class Note : ObservableObject
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    private string _content = string.Empty;
     /// <summary>
     /// 便签文本内容（纯文本，统一以 \n 或系统换行符存储）
     /// </summary>
-    public string Content { get; set; } = string.Empty;
+    public string Content
+    {
+        get => _content;
+        set
+        {
+            if (SetProperty(ref _content, value))
+            {
+                OnPropertyChanged(nameof(DisplayTitle));
+                OnPropertyChanged(nameof(PreviewText));
+                OnPropertyChanged(nameof(Snippet));
+            }
+        }
+    }
 
+    private NoteColor _color = NoteColor.Yellow;
     /// <summary>
     /// 主题色彩
     /// </summary>
-    public NoteColor Color { get; set; } = NoteColor.Yellow;
+    public NoteColor Color
+    {
+        get => _color;
+        set => SetProperty(ref _color, value);
+    }
+
+    private bool _isPinnedInList;
+    /// <summary>
+    /// 是否在便签列表中置顶排序（Pin to notes list）
+    /// </summary>
+    public bool IsPinnedInList
+    {
+        get => _isPinnedInList;
+        set => SetProperty(ref _isPinnedInList, value);
+    }
+
+    private bool _alwaysOnTop;
+    /// <summary>
+    /// 是否在桌面最顶层悬浮（Always on top）
+    /// </summary>
+    public bool AlwaysOnTop
+    {
+        get => _alwaysOnTop;
+        set => SetProperty(ref _alwaysOnTop, value);
+    }
 
     /// <summary>
-    /// 是否在桌面置顶（Topmost）
+    /// 兼容旧版置顶属性：读返回 IsPinnedInList，写同时赋给 IsPinnedInList 和 AlwaysOnTop
     /// </summary>
-    public bool IsPinned { get; set; }
+    public bool IsPinned
+    {
+        get => _isPinnedInList;
+        set
+        {
+            IsPinnedInList = value;
+            AlwaysOnTop = value;
+            OnPropertyChanged(nameof(IsPinned));
+        }
+    }
 
+    private bool _isDeleted;
     /// <summary>
     /// 是否软删除（回收站机制）
     /// </summary>
-    public bool IsDeleted { get; set; }
+    public bool IsDeleted
+    {
+        get => _isDeleted;
+        set => SetProperty(ref _isDeleted, value);
+    }
 
-    /// <summary>
-    /// 独立窗口在屏幕上的 X 坐标
-    /// </summary>
     public double WindowX { get; set; } = 150;
-
-    /// <summary>
-    /// 独立窗口在屏幕上的 Y 坐标
-    /// </summary>
     public double WindowY { get; set; } = 150;
-
-    /// <summary>
-    /// 独立窗口宽度
-    /// </summary>
     public double WindowWidth { get; set; } = 380;
-
-    /// <summary>
-    /// 独立窗口高度
-    /// </summary>
     public double WindowHeight { get; set; } = 420;
-
-    /// <summary>
-    /// 上次退出时贴纸窗口是否处于打开状态
-    /// </summary>
     public bool IsOpen { get; set; } = true;
-
-    /// <summary>
-    /// 创建时间（统一 UTC）
-    /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    private DateTime _updatedAt = DateTime.UtcNow;
     /// <summary>
     /// 最后修改时间（统一 UTC）
     /// </summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt
+    {
+        get => _updatedAt;
+        set => SetProperty(ref _updatedAt, value);
+    }
 
     /// <summary>
     /// 纯文本卡片显示：去除首尾空白，按需显示1~4行；无内容时显示“（空白便签）”
@@ -105,7 +140,6 @@ public sealed class Note
                 return string.Empty;
 
             using var reader = new StringReader(Content);
-            // 跳过首行非空标题
             bool skippedTitle = false;
             var snippetLines = new List<string>(3);
 

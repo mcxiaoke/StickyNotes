@@ -2,6 +2,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using CommunityToolkit.Mvvm.Messaging;
+using StickyNotes.Messages;
 using StickyNotes.Models;
 using StickyNotes.ViewModels;
 
@@ -112,12 +114,8 @@ public partial class NoteWindow : Window
 
     private void NewNoteButton_Click(object sender, RoutedEventArgs e)
     {
-        // 触发新建便签广播或命令
-        var mainWindow = Application.Current?.MainWindow as NotesListWindow;
-        if (mainWindow?.DataContext is NotesListViewModel vm)
-        {
-            vm.NewNoteCommand.Execute(null);
-        }
+        // 触发新建便签解耦消息
+        WeakReferenceMessenger.Default.Send(new NewNoteRequestedMessage());
     }
 
     private void MoreMenuButton_Click(object sender, RoutedEventArgs e)
@@ -128,13 +126,8 @@ public partial class NoteWindow : Window
     private void ShowNotesList_Click(object sender, RoutedEventArgs e)
     {
         MoreMenuPopup.IsOpen = false;
-        var mainWindow = Application.Current?.MainWindow;
-        if (mainWindow != null)
-        {
-            if (mainWindow.WindowState == WindowState.Minimized)
-                mainWindow.WindowState = WindowState.Normal;
-            mainWindow.Activate();
-        }
+        // 触发唤醒主管理窗口解耦消息
+        WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
     }
 
     private async void ColorSelected_Click(object sender, RoutedEventArgs e)

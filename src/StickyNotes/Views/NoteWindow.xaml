@@ -11,7 +11,7 @@
         AllowsTransparency="True"
         ResizeMode="CanResize"
         Background="Transparent"
-        Topmost="{Binding IsPinned}">
+        Topmost="{Binding AlwaysOnTop}">
 
     <!-- 顶层外壳：提供 Windows 11 细腻外层阴影与柔和圆角 -->
     <Border Margin="6"
@@ -60,9 +60,9 @@
 
                     <!-- 右侧按钮操作群 -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <!-- 置顶图钉切换按钮 -->
+                        <!-- 桌面置顶图钉切换按钮 -->
                         <Button Style="{StaticResource StickyToolbarButtonStyle}"
-                                ToolTip="置顶便签 (Ctrl+P)"
+                                ToolTip="桌面置顶 (Ctrl+P)"
                                 Margin="0,0,2,0"
                                 Command="{Binding TogglePinCommand}">
                             <Grid>
@@ -70,7 +70,7 @@
                                 <Border x:Name="PinnedHighlight" Width="26" Height="26"
                                         CornerRadius="{StaticResource CornerRadius.Small}"
                                         Background="#26000000"
-                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        Visibility="{Binding AlwaysOnTop, Converter={StaticResource BoolToVisibilityConverter}}" />
                                 <ui:SymbolIcon Symbol="Pin20" FontSize="15"
                                                Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
                             </Grid>

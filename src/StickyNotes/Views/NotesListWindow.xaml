@@ -229,7 +229,7 @@
                                                         <ui:SymbolIcon Symbol="Open20" FontSize="16" />
                                                     </MenuItem.Icon>
                                                 </MenuItem>
-                                                <MenuItem Header="切换置顶" Click="ContextTogglePin_Click">
+                                                <MenuItem Header="切换列表置顶" Click="ContextTogglePin_Click">
                                                     <MenuItem.Icon>
                                                         <ui:SymbolIcon Symbol="Pin20" FontSize="16" />
                                                     </MenuItem.Icon>
@@ -295,7 +295,7 @@
                                                                        Margin="0,3,4,0"
                                                                        VerticalAlignment="Top"
                                                                        Foreground="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
-                                                                       Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                                       Visibility="{Binding IsPinnedInList, Converter={StaticResource BoolToVisibilityConverter}}" />
                                                         <Button Style="{StaticResource StickyToolbarButtonStyle}"
                                                                 ToolTip="便签操作"
                                                                 Click="CardMoreButton_Click">

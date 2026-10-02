@@ -41,7 +41,8 @@ public sealed class WindowManager
             return existingWindow;
         }
 
-        var vm = _serviceProvider.GetRequiredService<NoteViewModel>();
+        var vm = _serviceProvider?.GetService<NoteViewModel>() 
+            ?? new NoteViewModel(_repository, _serviceProvider?.GetService<AutoSaveCoordinator>() ?? new AutoSaveCoordinator(_repository), _serviceProvider?.GetService<SettingsService>());
         vm.Initialize(note);
 
         var window = new NoteWindow(vm);
