@@ -15,6 +15,21 @@ public sealed class AppSettings
     /// 便签贴纸正文字体大小（pt）
     /// </summary>
     public double EditorFontSize { get; set; } = 14.0;
+
+    /// <summary>
+    /// 关闭主窗口时最小化到系统托盘
+    /// </summary>
+    public bool MinimizeToTrayOnClose { get; set; } = true;
+
+    /// <summary>
+    /// 启用全局快捷键（Win+Alt+N, Win+Alt+H）
+    /// </summary>
+    public bool EnableGlobalHotKeys { get; set; } = true;
+
+    /// <summary>
+    /// 开机自启时最小化到托盘
+    /// </summary>
+    public bool StartMinimized { get; set; } = true;
 }
 
 /// <summary>
@@ -35,6 +50,45 @@ public sealed class SettingsService
     {
         get => Settings.EditorFontSize;
         set => SetEditorFontSize(value);
+    }
+
+    public bool MinimizeToTrayOnClose
+    {
+        get => Settings.MinimizeToTrayOnClose;
+        set
+        {
+            if (Settings.MinimizeToTrayOnClose != value)
+            {
+                Settings.MinimizeToTrayOnClose = value;
+                SaveSettings();
+            }
+        }
+    }
+
+    public bool EnableGlobalHotKeys
+    {
+        get => Settings.EnableGlobalHotKeys;
+        set
+        {
+            if (Settings.EnableGlobalHotKeys != value)
+            {
+                Settings.EnableGlobalHotKeys = value;
+                SaveSettings();
+            }
+        }
+    }
+
+    public bool StartMinimized
+    {
+        get => Settings.StartMinimized;
+        set
+        {
+            if (Settings.StartMinimized != value)
+            {
+                Settings.StartMinimized = value;
+                SaveSettings();
+            }
+        }
     }
 
     public SettingsService(string? customSettingsPath = null)

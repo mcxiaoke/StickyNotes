@@ -8,18 +8,24 @@
         Width="380" Height="420"
         MinWidth="280" MinHeight="240"
         WindowStyle="None"
-        AllowsTransparency="True"
+        AllowsTransparency="False"
         ResizeMode="CanResize"
-        Background="Transparent"
-        Topmost="{Binding AlwaysOnTop}">
+        Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+        Topmost="{Binding AlwaysOnTop}"
+        PreviewMouseWheel="NoteWindow_PreviewMouseWheel">
 
-    <!-- 顶层外壳：提供 Windows 11 细腻外层阴影与柔和圆角 -->
-    <Border Margin="6"
-            CornerRadius="{StaticResource CornerRadius.Card}"
-            Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
-            BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="34"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <!-- 主便签容器：硬件加速渲染，1px 原色精致边框 -->
+    <Border BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
             BorderThickness="1"
-            Effect="{StaticResource Elevation.Window}">
+            Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}">
 
         <Grid Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}">
             <Grid.RowDefinitions>

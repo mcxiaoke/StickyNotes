@@ -96,7 +96,92 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 分组 2: 数据备份与迁移 -->
+                <!-- 分组 2: 窗口与系统集成 (托盘、热键、开机自启) -->
+                <TextBlock Text="系统与常驻"
+                           Style="{StaticResource Type.Subtitle}"
+                           Margin="0,0,0,8" />
+
+                <Border CornerRadius="{StaticResource CornerRadius.Card}"
+                        Background="{StaticResource Fluent.CardBgBrush}"
+                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Padding="{StaticResource Thickness.CardPadding}"
+                        Margin="0,0,0,16"
+                        Effect="{StaticResource Elevation.Card}">
+                    <StackPanel>
+                        <!-- 1. 关闭主窗口时最小化到系统托盘 -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="关闭主窗口时最小化到系统托盘" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="关闭主列表窗口后在后台保持运行，贴纸继续可用，通过托盘图标可随时唤醒"
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding MinimizeToTrayOnClose, Mode=TwoWay}"
+                                             VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+
+                        <!-- 2. 全局快捷键 -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="启用系统全局快捷键" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="Win+Alt+N：随时快速新建便签；Win+Alt+H：随时呼出便签管理中心"
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding EnableGlobalHotKeys, Mode=TwoWay}"
+                                             VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+
+                        <!-- 3. Windows 开机自动启动 -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="开机自动启动" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="计算机启动登录时自动启动 StickyNotes 并恢复桌面敞开贴纸"
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding IsAutoStartEnabled, Mode=TwoWay}"
+                                             VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+
+                        <!-- 4. 开机自启时静默启动至托盘 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="开机启动时最小化到托盘" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="随系统自启时不弹出管理中心主窗口，仅恢复桌面贴纸并在托盘静默就绪"
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding StartMinimized, Mode=TwoWay}"
+                                             VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 分组 3: 数据备份与迁移 -->
                 <TextBlock Text="数据与备份"
                            Style="{StaticResource Type.Subtitle}"
                            Margin="0,0,0,8" />

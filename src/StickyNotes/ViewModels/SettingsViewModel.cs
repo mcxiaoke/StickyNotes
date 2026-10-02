@@ -20,6 +20,7 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsService _settingsService;
     private readonly ExportImportService _exportImportService;
+    private readonly AutoStartService? _autoStartService;
 
     public IReadOnlyList<FontSizeOption> FontSizeOptions { get; } = new List<FontSizeOption>
     {
@@ -44,10 +45,67 @@ public partial class SettingsViewModel : ObservableObject
     public bool IsPortableMode => AppPaths.IsPortableMode;
     public string DeploymentModeDescription => AppPaths.DeploymentModeDescription;
 
-    public SettingsViewModel(SettingsService settingsService, ExportImportService exportImportService)
+    public bool MinimizeToTrayOnClose
+    {
+        get => _settingsService.MinimizeToTrayOnClose;
+        set
+        {
+            if (_settingsService.MinimizeToTrayOnClose != value)
+            {
+                _settingsService.MinimizeToTrayOnClose = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool EnableGlobalHotKeys
+    {
+        get => _settingsService.EnableGlobalHotKeys;
+        set
+        {
+            if (_settingsService.EnableGlobalHotKeys != value)
+            {
+                _settingsService.EnableGlobalHotKeys = value;
+                WeakReferenceMessenger.Default.Send(new HotKeyConfigChangedMessage(value));
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool StartMinimized
+    {
+        get => _settingsService.StartMinimized;
+        set
+        {
+            if (_settingsService.StartMinimized != value)
+            {
+                _settingsService.StartMinimized = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsAutoStartEnabled
+    {
+        get => _autoStartService?.IsAutoStartEnabled ?? false;
+        set
+        {
+            if (_autoStartService != null && _autoStartService.IsAutoStartEnabled != value)
+            {
+                _autoStartService.SetAutoStart(value);
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public SettingsViewModel(
+        SettingsService settingsService, 
+        ExportImportService exportImportService,
+        AutoStartService? autoStartService = null)
     {
         _settingsService = settingsService;
         _exportImportService = exportImportService;
+        _autoStartService = autoStartService;
 
         _selectedFontSize = _settingsService.EditorFontSize;
 
