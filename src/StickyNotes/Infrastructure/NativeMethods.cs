@@ -137,4 +137,30 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetCursorPos(out POINT lpPoint);
     #endregion
+
+    #region 内存优化与工作集修剪 (Working Set Trimming)
+    [DllImport("psapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+    /// <summary>
+    /// 主动触发当前进程工作集修剪，释放后台闲置/非活跃物理内存
+    /// </summary>
+    public static void TrimWorkingSet()
+    {
+        try
+        {
+            // 适度建议 GC 收集非存活对象
+            GC.Collect(2, GCCollectionMode.Optimized, false);
+            GC.WaitForPendingFinalizers();
+
+            using var proc = System.Diagnostics.Process.GetCurrentProcess();
+            EmptyWorkingSet(proc.Handle);
+        }
+        catch
+        {
+            // 内存修剪属辅助优化机制，静默容错，不阻断正常业务
+        }
+    }
+    #endregion
 }

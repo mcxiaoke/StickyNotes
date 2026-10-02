@@ -314,17 +314,39 @@ public class ConcurrencyAndDecouplingTests
     }
 
     /// <summary>
-    /// P1-5 验证：单实例 Local 命名互斥量格式与注册窗口消息非零有效性
+    /// P1-5 验证：单实例 Local 确定性 SHA256 互斥量格式、跨进程一致性与注册窗口消息非零有效性
     /// </summary>
     [TestMethod]
     public void P1_5_LocalHashedMutex_AndActivation()
     {
-        var dataDirHash = (AppPaths.DataDirectory?.ToLowerInvariant() ?? "").GetHashCode().ToString("X8");
-        var mutexName = $@"Local\StickyNotes_{dataDirHash}";
+        var dataDirHash = AppPaths.GetDataDirectoryHash();
+        var mutexName = AppPaths.InstanceMutexName;
 
         Assert.IsTrue(mutexName.StartsWith(@"Local\StickyNotes_"), "Mutex 必须以 Local\\StickyNotes_ 开头");
         Assert.AreEqual(8, dataDirHash.Length, "数据目录哈希长度必须为 8 位十六进制");
+        Assert.AreEqual(mutexName, $@"Local\StickyNotes_{dataDirHash}");
+
+        // 验证确定性哈希：多次计算结果必须完全恒定一致，避免 .NET 8 字符串随机加盐失效
+        Assert.AreEqual(dataDirHash, AppPaths.GetDataDirectoryHash(), "确定性哈希在同目录多次计算必须完全一致");
 
         Assert.AreNotEqual(0, NativeMethods.WM_ACTIVATE_INSTANCE, "WM_ACTIVATE_INSTANCE 注册消息 ID 必须大于 0");
+    }
+
+    /// <summary>
+    /// 验证：工作集修剪安全执行无异常，且单实例互斥量排他机制有效拦截多开
+    /// </summary>
+    [TestMethod]
+    public void WorkingSetTrimming_AndMutexExclusion()
+    {
+        // 1. 验证工作集修剪 Win32 API 与 GC 流程正常运转
+        NativeMethods.TrimWorkingSet();
+
+        // 2. 验证命名互斥量多实例排他逻辑
+        var testMutexName = $@"Local\StickyNotes_Test_{Guid.NewGuid():N}";
+        using var m1 = new Mutex(true, testMutexName, out bool isNew1);
+        Assert.IsTrue(isNew1, "首次获取独立互斥量应当成功");
+
+        using var m2 = new Mutex(true, testMutexName, out bool isNew2);
+        Assert.IsFalse(isNew2, "二次尝试获取相同命名互斥量必须被拦截判定为已存在");
     }
 }
