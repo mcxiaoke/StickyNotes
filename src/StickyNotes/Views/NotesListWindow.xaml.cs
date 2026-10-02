@@ -41,6 +41,23 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             {
                 e.Cancel = true;
                 Hide();
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(1000);
+                    NativeMethods.TrimWorkingSet();
+                });
+            }
+        };
+
+        StateChanged += (s, e) =>
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(1000);
+                    NativeMethods.TrimWorkingSet();
+                });
             }
         };
 

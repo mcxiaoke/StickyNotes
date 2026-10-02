@@ -94,6 +94,22 @@ public static class AppPaths
     }
 
     /// <summary>
+    /// 计算基于数据目录的确定性哈希（8位大写十六进制），确保单实例 Mutex 跨进程一致。
+    /// 避开 .NET 8 string.GetHashCode() 默认启用的跨进程随机加盐机制 (Randomized String Hashing)。
+    /// </summary>
+    public static string GetDataDirectoryHash()
+    {
+        var normalized = (DataDirectory?.Trim().ToLowerInvariant() ?? "");
+        var hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(hashBytes, 0, 4);
+    }
+
+    /// <summary>
+    /// 当前数据目录对应的单实例 Mutex 名称
+    /// </summary>
+    public static string InstanceMutexName => $@"Local\StickyNotes_{GetDataDirectoryHash()}";
+
+    /// <summary>
     /// 当前部署模式的友好描述文本
     /// </summary>
     public static string DeploymentModeDescription
