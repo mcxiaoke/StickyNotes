@@ -62,8 +62,14 @@ if ([string]::IsNullOrEmpty($Version)) {
 }
 Write-Host "  检测到产品版本号: $Version" -ForegroundColor Green
 
-# 清理 pdb 调试符号文件
-Get-ChildItem $fdOut -Filter "*.pdb" | Remove-Item -Force
+# 清理 pdb 调试符号与开发态临时文件，确保便携样例配置文件存在
+Get-ChildItem $fdOut -Filter "*.pdb" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $fdOut "portable.ini") -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $fdOut "app_data") -Recurse -Force -ErrorAction SilentlyContinue
+$sampleIniSrc = Join-Path $repoRoot "src" "StickyNotes" "Samples" "portable.sample.ini"
+if (-not (Test-Path (Join-Path $fdOut "portable.sample.ini")) -and (Test-Path $sampleIniSrc)) {
+    Copy-Item $sampleIniSrc (Join-Path $fdOut "portable.sample.ini") -Force
+}
 
 # ============================================================
 # 3. 构建免安装独立单文件版 (Self-Contained Single File)
@@ -72,7 +78,12 @@ Write-Host "[3/5] 构建自包含单文件独立版 (无需安装 .NET 运行时
 $scOut = Join-Path $pubTemp "standalone"
 & dotnet publish $srcProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --nologo -v minimal -o $scOut
 if ($LASTEXITCODE -ne 0) { Write-Host "构建独立单文件版失败" -ForegroundColor Red; exit 1 }
-Get-ChildItem $scOut -Filter "*.pdb" | Remove-Item -Force
+Get-ChildItem $scOut -Filter "*.pdb" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $scOut "portable.ini") -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $scOut "app_data") -Recurse -Force -ErrorAction SilentlyContinue
+if (-not (Test-Path (Join-Path $scOut "portable.sample.ini")) -and (Test-Path $sampleIniSrc)) {
+    Copy-Item $sampleIniSrc (Join-Path $scOut "portable.sample.ini") -Force
+}
 
 # ============================================================
 # 4. 打包压缩为发布 zip

@@ -644,7 +644,41 @@ dotnet publish src/StickyNotes/StickyNotes.csproj \
   -o ./dist/StickyNotes-v1.0.0-win64
 ```
 
-### 9.2 未来路线演进方案（平滑扩展）
+### 9.2 Costura.Fody 单文件 DLL 依赖集成内嵌
+
+为消除发布产物中散落的托管依赖（`Wpf.Ui.dll`、`Microsoft.Data.Sqlite.dll`、`CommunityToolkit.Mvvm.dll`、`Microsoft.Extensions.DependencyInjection.dll`、`SQLitePCLRaw.*.dll` 等），项目引入 `Costura.Fody` 织入流水线：
+- **构建织入**：配置 `FodyWeavers.xml`（`<Costura />`），在 MSBuild 生成期自动将所有外部托管程序集压缩嵌入到 `StickyNotes.dll` 内部资源中；
+- **运行时动态载入**：利用 Costura 的 `AppDomain.AssemblyResolve` 挂钩机制，在模块初始化时由内存中直接按需解压加载，完全规避程序集版本冲突与部署遗漏；
+- **产物体积极致优化**：框架依赖便携版的发布包体积由原本散装约 20MB 压缩至仅 **3.47 MB**，目录仅含主程序、SQLite 原生驱动与配置样例。
+
+### 9.3 便携绿化模式与基准存储拓扑（对齐 CarroDesk 工业级规范）
+
+`StickyNotes.Infrastructure.AppPaths` 实现了四级基准存储路径决议体系：
+
+```mermaid
+graph TD
+    Start([启动路径决议]) --> ChkOverride{DataDirOverride 非空?}
+    ChkOverride -- 是 --> RetOverride[返回手动/测试覆盖路径]
+    ChkOverride -- 否 --> ChkEnv{STICKYNOTES_DATA_DIR 环境变量?}
+    ChkEnv -- 是 --> RetEnv[返回环境变量指定路径]
+    ChkEnv -- 否 --> ChkPortable{exe同级存在 portable.ini?}
+    ChkPortable -- 是 --> RetPortable["便携绿化模式: &lt;exe目录&gt;/app_data/"]
+    ChkPortable -- 否 --> RetRoaming["标准漫游模式: %LOCALAPPDATA%/StickyNotes/"]
+```
+
+#### 全局拓扑全景
+```text
+<DataDirectory>/
+├── notes.db            # [核心存储] SQLite 单库（WAL 模式）
+├── settings.json       # [系统配置] 窗口字号、偏好设置
+├── window.json         # [视口记忆] 主列表窗口尺寸与屏幕位置
+├── backups/            # [自动备份] 循环滚动冷备份副本
+└── logs/               # [运行日志] 诊断与异常崩溃记录
+```
+
+- **绿色解压升级**：便携模式下数据完全内聚于 `app_data/`，软件升级只需覆盖 exe 与驱动，绝不影响或误改便签数据。
+
+### 9.4 未来路线演进方案（平滑扩展）
 1. **全文检索升级（FTS5）**：
    - 当便签数量达到 10,000+ 条时，在 `SqliteDatabaseContext` 中添加 `PRAGMA user_version = 2` 迁移，建立 `Notes_Fts` 虚拟表。
    - 实现 `FtsSearchService : ISearchService`，利用 SQLite FTS5 对海量笔记进行候选初筛，再由原算法精算行号，UI 零修改。

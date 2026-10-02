@@ -148,12 +148,31 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="本地数据目录"
-                                           Style="{StaticResource Type.BodyStrong}" />
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="本地数据目录"
+                                               Style="{StaticResource Type.BodyStrong}" />
+                                    <Border CornerRadius="4"
+                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Margin="8,0,0,0"
+                                            Padding="6,1"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding DeploymentModeDescription}"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold" />
+                                    </Border>
+                                </StackPanel>
                                 <TextBlock Text="{Binding DataDirectoryPath}"
                                            Style="{StaticResource Type.CaptionSubtle}"
                                            TextTrimming="CharacterEllipsis"
-                                           Margin="0,2,0,0" />
+                                           Margin="0,4,0,0" />
+                                <TextBlock Text="提示：在 exe 同目录下放置 portable.ini 即可开启便携绿化模式（数据保存在同级 app_data/ 目录）"
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           FontSize="11"
+                                           Margin="0,3,0,0"
+                                           Opacity="0.8" />
                             </StackPanel>
 
                             <ui:Button Grid.Column="1"

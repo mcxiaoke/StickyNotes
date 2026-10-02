@@ -7,10 +7,48 @@ namespace StickyNotes.Infrastructure;
 /// </summary>
 public static class AppPaths
 {
+    /// <summary>
+    /// 环境变量名：设置后覆盖数据目录（便携部署 / 自动化测试 / CI 隔离用）
+    /// </summary>
+    public const string DataDirEnvVarName = "STICKYNOTES_DATA_DIR";
+
     private static string? _dataDirOverride;
+    private static string? _baseDirectoryOverride;
 
     /// <summary>
-    /// 测试环境可通过此属性重定向数据目录，避免污染生产数据
+    /// 程序可执行文件基准目录（支持单元测试重定向）
+    /// </summary>
+    public static string AppBaseDirectory
+    {
+        get => _baseDirectoryOverride ?? AppDomain.CurrentDomain.BaseDirectory;
+        set => _baseDirectoryOverride = value;
+    }
+
+    /// <summary>
+    /// 便携模式标记文件路径（exe 同级 portable.ini）
+    /// </summary>
+    public static string PortableFlagPath => Path.Combine(AppBaseDirectory, "portable.ini");
+
+    /// <summary>
+    /// 便携模式数据目录（exe 同级 app_data）
+    /// </summary>
+    public static string PortableDataDirectory => Path.Combine(AppBaseDirectory, "app_data");
+
+    /// <summary>
+    /// 标准漫游模式数据目录（%LOCALAPPDATA%\StickyNotes）
+    /// </summary>
+    public static string RoamingDataDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "StickyNotes"
+    );
+
+    /// <summary>
+    /// 是否处于便携模式（通过检测 exe 同级是否存在 portable.ini 决定）
+    /// </summary>
+    public static bool IsPortableMode => File.Exists(PortableFlagPath);
+
+    /// <summary>
+    /// 测试环境可通过此属性重定向数据目录，避免污染生产数据（优先级最高）
     /// </summary>
     public static string? DataDirOverride
     {
@@ -19,18 +57,67 @@ public static class AppPaths
     }
 
     /// <summary>
-    /// 数据根目录：%LOCALAPPDATA%\StickyNotes
+    /// 当前生效的数据根目录：
+    /// 优先级：DataDirOverride > STICKYNOTES_DATA_DIR 环境变量 > 便携模式 (app_data) > 标准漫游模式 (%LOCALAPPDATA%\StickyNotes)
     /// </summary>
     public static string DataDirectory
     {
         get
         {
-            var dir = _dataDirOverride ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "StickyNotes"
-            );
+            var dir = ResolveDataDirectory();
             Directory.CreateDirectory(dir);
             return dir;
+        }
+    }
+
+    private static string ResolveDataDirectory()
+    {
+        if (!string.IsNullOrWhiteSpace(_dataDirOverride))
+        {
+            return _dataDirOverride;
+        }
+
+        try
+        {
+            var envDir = Environment.GetEnvironmentVariable(DataDirEnvVarName);
+            if (!string.IsNullOrWhiteSpace(envDir))
+            {
+                return envDir;
+            }
+        }
+        catch
+        {
+            // 环境变量读取异常时静默降级
+        }
+
+        return IsPortableMode ? PortableDataDirectory : RoamingDataDirectory;
+    }
+
+    /// <summary>
+    /// 当前部署模式的友好描述文本
+    /// </summary>
+    public static string DeploymentModeDescription
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_dataDirOverride))
+            {
+                return "手动覆盖模式 (Override)";
+            }
+
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DataDirEnvVarName)))
+                {
+                    return "环境变量模式 (STICKYNOTES_DATA_DIR)";
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return IsPortableMode ? "便携绿化模式 (app_data)" : "标准漫游模式 (%LOCALAPPDATA%)";
         }
     }
 

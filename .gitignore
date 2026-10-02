@@ -10,3 +10,13 @@ temp/
 *.db
 *.db-wal
 *.db-shm
+
+# Fody schema
+FodyWeavers.xsd
+
+# Test Results
+TestResults/
+
+# Local portable mode data
+app_data/
+portable.ini

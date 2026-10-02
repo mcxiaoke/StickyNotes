@@ -41,6 +41,8 @@ public partial class SettingsViewModel : ObservableObject
     public string BuildTime { get; }
     public string RuntimeInfo { get; }
     public string DataDirectoryPath => AppPaths.DataDirectory;
+    public bool IsPortableMode => AppPaths.IsPortableMode;
+    public string DeploymentModeDescription => AppPaths.DeploymentModeDescription;
 
     public SettingsViewModel(SettingsService settingsService, ExportImportService exportImportService)
     {
