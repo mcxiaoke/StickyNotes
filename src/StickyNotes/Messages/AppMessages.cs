@@ -26,3 +26,28 @@ public sealed class NoteCreatedMessage : ValueChangedMessage<Note>
 {
     public NoteCreatedMessage(Note value) : base(value) { }
 }
+
+/// <summary>
+/// 便签已归档消息
+/// </summary>
+public sealed class NoteArchivedMessage : ValueChangedMessage<Guid>
+{
+    public NoteArchivedMessage(Guid noteId) : base(noteId) { }
+}
+
+/// <summary>
+/// 便签已从归档恢复消息
+/// </summary>
+public sealed class NoteRestoredMessage : ValueChangedMessage<Note>
+{
+    public NoteRestoredMessage(Note value) : base(value) { }
+}
+
+/// <summary>
+/// 便签编辑器字体大小变更消息
+/// </summary>
+public sealed class FontSizeChangedMessage : ValueChangedMessage<double>
+{
+    public FontSizeChangedMessage(double newFontSize) : base(newFontSize) { }
+}
+

@@ -1,0 +1,274 @@
+<ui:FluentWindow x:Class="StickyNotes.Views.ArchivedNotesWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:models="clr-namespace:StickyNotes.Models"
+                 Title="彩色便签"
+                 Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
+                 Width="480" Height="720"
+                 MinWidth="380" MinHeight="520"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 Background="{StaticResource Fluent.WindowBgBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- 0: Fluent 现代沉浸式标题栏 -->
+            <RowDefinition Height="Auto" />
+            <!-- 1: 主内容容器 -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 0. Fluent 标题栏 -->
+        <ui:TitleBar Grid.Row="0"
+                     Title="已归档便签"
+                     Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
+                     ShowMaximize="True"
+                     ShowMinimize="True" />
+
+        <!-- 1. 主内容区 -->
+        <Grid Grid.Row="1" Margin="{StaticResource Thickness.PageMargin}">
+            <Grid.RowDefinitions>
+                <!-- 顶部主标题与清空操作栏 -->
+                <RowDefinition Height="Auto" />
+                <!-- 现代全宽搜索栏 -->
+                <RowDefinition Height="Auto" />
+                <!-- 状态提示条 -->
+                <RowDefinition Height="Auto" />
+                <!-- 便签卡片流或空状态展示区 -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 1.1 顶部标题与清空操作栏 -->
+            <Grid Grid.Row="0" Margin="{StaticResource Thickness.HeaderMargin}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 左侧图标与标题 -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:SymbolIcon Symbol="Archive24"
+                                   FontSize="22"
+                                   Foreground="{StaticResource Fluent.AccentBrush}"
+                                   Margin="0,0,8,0" />
+                    <TextBlock Text="已归档便签"
+                               Style="{StaticResource Type.TitleLarge}" />
+                    <Border Background="{StaticResource Fluent.SubtleBorderBrush}"
+                            CornerRadius="{StaticResource CornerRadius.Pill}"
+                            Padding="8,2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ArchivedCount, StringFormat='{}{0} 条'}"
+                                   Style="{StaticResource Type.Caption}"
+                                   Foreground="{StaticResource Fluent.TextSecondaryBrush}" />
+                    </Border>
+                </StackPanel>
+
+                <!-- 右侧清空归档按钮 -->
+                <ui:Button Grid.Column="1"
+                           Appearance="Secondary"
+                           Content="清空归档"
+                           Padding="12,6"
+                           ToolTip="彻底删除所有已归档的便签"
+                           Foreground="{StaticResource Fluent.DangerBrush}"
+                           IsEnabled="{Binding CanClearArchived}"
+                           Click="ClearAllButton_Click">
+                    <ui:Button.Icon>
+                        <ui:SymbolIcon Symbol="Delete24" Foreground="{StaticResource Fluent.DangerBrush}" />
+                    </ui:Button.Icon>
+                </ui:Button>
+            </Grid>
+
+            <!-- 1.2 现代 Fluent 搜索栏 -->
+            <ui:TextBox x:Name="SearchBox"
+                        Grid.Row="1"
+                        PlaceholderText="搜索已归档便签... (Ctrl+F)"
+                        ClearButtonEnabled="True"
+                        Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        FontSize="13"
+                        Margin="0,0,0,10">
+                <ui:TextBox.Icon>
+                    <ui:SymbolIcon Symbol="Search24" />
+                </ui:TextBox.Icon>
+            </ui:TextBox>
+
+            <!-- 1.3 状态辅助说明条 -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <TextBlock Style="{StaticResource Type.CaptionSubtle}"
+                           Text="已归档便签不会显示在桌面贴纸与主列表中。支持恢复或彻底删除。" />
+            </Grid>
+
+            <!-- 1.4 主卡片流列表与空状态 -->
+            <Grid Grid.Row="3">
+                <!-- 空状态展示区 -->
+                <Border CornerRadius="{StaticResource CornerRadius.Card}"
+                        Background="{StaticResource Fluent.CardDefaultBgBrush}"
+                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Padding="24"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Visibility="{Binding HasNoNotes, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Archive24"
+                                       FontSize="40"
+                                       Foreground="{StaticResource Fluent.TextSecondaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12" />
+                        <TextBlock Text="暂无归档便签"
+                                   Style="{StaticResource Type.Subtitle}"
+                                   Foreground="{StaticResource Fluent.TextPrimaryBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,6" />
+                        <TextBlock Text="在便签管理中心或贴纸窗口点击归档，便签将安全收纳在此处"
+                                   Style="{StaticResource Type.CaptionSubtle}"
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   MaxWidth="320" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 归档卡片列表 -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding HasNoNotes, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <ItemsControl ItemsSource="{Binding FilteredNotes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type models:Note}">
+                                <Border Margin="0,0,0,10"
+                                        CornerRadius="{StaticResource CornerRadius.Card}"
+                                        Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+                                        BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
+                                        BorderThickness="1"
+                                        Padding="{StaticResource Thickness.CardPadding}"
+                                        Cursor="Arrow">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="RenderTransform">
+                                                <Setter.Value>
+                                                    <TranslateTransform Y="0" />
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Setter Property="Effect" Value="{StaticResource Elevation.Card}" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <TranslateTransform Y="-1.5" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Setter Property="Effect">
+                                                        <Setter.Value>
+                                                            <DropShadowEffect BlurRadius="12"
+                                                                              ShadowDepth="3"
+                                                                              Direction="270"
+                                                                              Color="#1E293B"
+                                                                              Opacity="0.16" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <!-- 左侧原色药丸条 -->
+                                            <ColumnDefinition Width="Auto" />
+                                            <!-- 卡片内容主体 -->
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- 色彩指示条 -->
+                                        <Border Grid.Column="0"
+                                                Width="4"
+                                                CornerRadius="{StaticResource CornerRadius.Pill}"
+                                                Background="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
+                                                Margin="0,2,10,2" />
+
+                                        <!-- 卡片信息区 -->
+                                        <Grid Grid.Column="1">
+                                            <Grid.RowDefinitions>
+                                                <!-- 正文预览与快捷按钮 -->
+                                                <RowDefinition Height="Auto" />
+                                                <!-- 底部时间戳 -->
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <!-- 正文预览行与右侧操作按钮 -->
+                                            <Grid Grid.Row="0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- 便签正文纯文本：不区分标题正文，统一普通字体，自适应 1~4 行 -->
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding PreviewText}"
+                                                           Style="{StaticResource Type.Body}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                                                           FontWeight="Normal"
+                                                           FontSize="13"
+                                                           LineHeight="20"
+                                                           MaxHeight="80"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Top"
+                                                           Margin="0,2,8,6" />
+
+                                                <!-- 右侧快捷操作按钮组 -->
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                                    <!-- 恢复便签按钮 -->
+                                                    <Button Style="{StaticResource StickyToolbarButtonStyle}"
+                                                            ToolTip="恢复便签到主列表"
+                                                            Margin="0,0,4,0"
+                                                            Click="RestoreNoteButton_Click">
+                                                        <ui:SymbolIcon Symbol="ArrowUndo20"
+                                                                       FontSize="15"
+                                                                       Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                                                    </Button>
+
+                                                    <!-- 彻底永久删除按钮 -->
+                                                    <Button Style="{StaticResource StickyToolbarButtonStyle}"
+                                                            ToolTip="彻底删除该便签 (不可撤销)"
+                                                            Click="HardDeleteNoteButton_Click">
+                                                        <ui:SymbolIcon Symbol="Delete20"
+                                                                       FontSize="15"
+                                                                       Foreground="{StaticResource Fluent.DangerBrush}" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- 底部信息 -->
+                                            <Grid Grid.Row="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           Style="{StaticResource Type.CaptionSubtle}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                                                           VerticalAlignment="Center">
+                                                    <Run Text="{Binding Content.Length, Mode=OneWay}" /><Run Text=" 字符" />
+                                                </TextBlock>
+
+                                                <TextBlock Grid.Column="1"
+                                                           Style="{StaticResource Type.CaptionSubtle}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                                                           VerticalAlignment="Center">
+                                                    <Run Text="修改于 " /><Run Text="{Binding UpdatedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}', Mode=OneWay}" />
+                                                </TextBlock>
+                                            </Grid>
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

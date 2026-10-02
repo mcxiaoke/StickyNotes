@@ -181,23 +181,10 @@ public partial class NoteWindow : Window
 
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
-        // 若便签无任何实质内容，直接删除无需弹出二次确认弹窗
-        if (!string.IsNullOrWhiteSpace(ViewModel.Content))
-        {
-            var result = MessageBox.Show(
-                "确定要删除这条便签吗？",
-                "删除确认",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question
-            );
-
-            if (result != MessageBoxResult.Yes)
-                return;
-        }
-
         await ViewModel.DeleteAsync();
         Close();
     }
+
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {

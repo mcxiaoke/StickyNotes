@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:models="clr-namespace:StickyNotes.Models"
-        Title="{Binding Note.DisplayTitle}"
+        Title="彩色便签"
+        Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
         Width="380" Height="420"
         MinWidth="280" MinHeight="240"
         WindowStyle="None"
@@ -208,17 +209,17 @@
                                                HorizontalAlignment="Stretch"
                                                HorizontalContentAlignment="Left"
                                                Icon="AppsListDetail20"
-                                               Content="便签管理中心 (Ctrl+H)"
+                                               Content="彩色便签 (Ctrl+H)"
                                                FontSize="13"
                                                Padding="8,6"
                                                Click="ShowNotesList_Click" />
 
-                                    <!-- 删除便签 -->
+                                    <!-- 归档便签 -->
                                     <ui:Button Appearance="Transparent"
                                                HorizontalAlignment="Stretch"
                                                HorizontalContentAlignment="Left"
-                                               Icon="Delete20"
-                                               Content="删除便签 (Ctrl+D)"
+                                               Icon="Archive20"
+                                               Content="归档便签 (Ctrl+D)"
                                                FontSize="13"
                                                Padding="8,6"
                                                Foreground="{StaticResource Fluent.DangerBrush}"
@@ -252,9 +253,10 @@
                      HorizontalScrollBarVisibility="Disabled"
                      IsInactiveSelectionHighlightEnabled="True"
                      SelectionBrush="#3399FF"
-                     FontSize="14"
+                     FontSize="{Binding FontSize}"
                      FontFamily="{StaticResource FontFamily.Default}"
                      Padding="{StaticResource Thickness.StickyEditorPadding}" />
+
 
             <!-- 3. 底部微型辅助栏：统计字符数与已同步状态 -->
             <Grid Grid.Row="2" Margin="{StaticResource Thickness.StickyFooterMargin}" VerticalAlignment="Center">

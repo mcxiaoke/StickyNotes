@@ -82,11 +82,14 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             if (btn != null) return;
         }
 
-        if (sender is FrameworkElement { DataContext: Note note })
+        // 双击打开新窗口
+        if (e.ClickCount == 2 && sender is FrameworkElement { DataContext: Note note })
         {
             ViewModel.OpenNoteCommand.Execute(note);
+            e.Handled = true;
         }
     }
+
 
     private void CardMoreButton_Click(object sender, RoutedEventArgs e)
     {
@@ -119,24 +122,24 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         }
     }
 
+    private void OpenArchiveButton_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.OpenArchiveCommand.Execute(null);
+    }
+
+    private void OpenSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.OpenSettingsCommand.Execute(null);
+    }
+
     private async void ContextDeleteNote_Click(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { DataContext: Note note })
         {
-            if (!string.IsNullOrWhiteSpace(note.Content))
-            {
-                var result = MessageBox.Show(
-                    "确定要删除这条便签吗？",
-                    "删除确认",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question
-                );
-                if (result != MessageBoxResult.Yes) return;
-            }
-
             await ViewModel.DeleteNoteCommand.ExecuteAsync(note);
         }
     }
+
 
     private void SearchBox_KeyDown(object sender, KeyEventArgs e)
     {

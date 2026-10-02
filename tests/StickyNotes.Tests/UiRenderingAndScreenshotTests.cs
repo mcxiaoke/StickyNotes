@@ -22,6 +22,12 @@ public class UiRenderingAndScreenshotTests
         public Task<IReadOnlyList<Note>> GetAllActiveAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Note>>(Notes.Where(n => !n.IsDeleted).ToList());
 
+        public Task<IReadOnlyList<Note>> GetAllArchivedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(Notes.Where(n => n.IsDeleted).ToList());
+
+        public Task<IReadOnlyList<Note>> GetAllAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(Notes.ToList());
+
         public Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Notes.FirstOrDefault(n => n.Id == id));
 
@@ -35,8 +41,24 @@ public class UiRenderingAndScreenshotTests
 
         public Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
         {
+            return ArchiveNoteAsync(id, cancellationToken);
+        }
+
+        public Task ArchiveNoteAsync(Guid id, CancellationToken cancellationToken = default)
+        {
             var note = Notes.FirstOrDefault(n => n.Id == id);
-            if (note != null) note.IsDeleted = true;
+            if (note != null)
+            {
+                note.IsDeleted = true;
+                note.IsOpen = false;
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task RestoreNoteAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            var note = Notes.FirstOrDefault(n => n.Id == id);
+            if (note != null) note.IsDeleted = false;
             return Task.CompletedTask;
         }
 
@@ -45,6 +67,13 @@ public class UiRenderingAndScreenshotTests
             Notes.RemoveAll(n => n.Id == id);
             return Task.CompletedTask;
         }
+
+        public Task ClearAllArchivedAsync(CancellationToken cancellationToken = default)
+        {
+            Notes.RemoveAll(n => n.IsDeleted);
+            return Task.CompletedTask;
+        }
+
 
         public Task UpdateWindowBoundsAsync(Guid id, double x, double y, double width, double height, bool isOpen, CancellationToken cancellationToken = default)
         {
@@ -105,7 +134,7 @@ public class UiRenderingAndScreenshotTests
             var win = new NotesListWindow(vm);
 
             // 断言窗口基本属性与数据展示
-            Assert.AreEqual("便签管理中心", win.Title);
+            Assert.AreEqual("彩色便签", win.Title);
             Assert.AreEqual(3, vm.Notes.Count);
             Assert.IsFalse(vm.IsSearching);
 
@@ -389,4 +418,59 @@ public class UiRenderingAndScreenshotTests
             Assert.AreNotEqual(y1, y2);
         });
     }
+
+    [TestMethod]
+    public void Render_ArchivedNotesWindow_Normal_SavesSnapshot()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository
+            {
+                Notes =
+                {
+                    new Note
+                    {
+                        Id = Guid.NewGuid(),
+                        Content = "旧版需求草稿 (已归档)\n这是上周讨论的产品方案，暂时移至归档留存备查。",
+                        Color = NoteColor.Blue,
+                        IsDeleted = true,
+                        UpdatedAt = DateTime.UtcNow.AddDays(-2)
+                    },
+                    new Note
+                    {
+                        Id = Guid.NewGuid(),
+                        Content = "已完成的项目备忘录\n1. 完成 Windows 11 Fluent 规范对齐\n2. 增加归档与设置中心",
+                        Color = NoteColor.Purple,
+                        IsDeleted = true,
+                        UpdatedAt = DateTime.UtcNow.AddDays(-1)
+                    }
+                }
+            };
+
+            var vm = new ArchivedNotesViewModel(repo);
+            vm.LoadArchivedNotesAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(2, vm.ArchivedCount);
+            Assert.IsFalse(vm.HasNoNotes);
+
+            var win = new ArchivedNotesWindow(vm);
+            TestEnvironment.SaveWindowSnapshot(win, 480, 720, "08_ArchivedNotesWindow.png");
+        });
+    }
+
+    [TestMethod]
+    public void Render_SettingsWindow_Normal_SavesSnapshot()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var settingsService = new SettingsService();
+            var backupService = new ExportImportService(repo);
+            var vm = new SettingsViewModel(settingsService, backupService);
+
+            var win = new SettingsWindow(vm);
+            TestEnvironment.SaveWindowSnapshot(win, 480, 680, "09_SettingsWindow.png");
+        });
+    }
 }
+

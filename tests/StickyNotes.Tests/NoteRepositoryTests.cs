@@ -151,4 +151,72 @@ public class NoteRepositoryTests
         Assert.AreEqual(500, updated.WindowHeight);
         Assert.IsFalse(updated.IsOpen);
     }
+
+    [TestMethod]
+    public async Task ArchiveNoteAsync_And_GetAllArchivedAsync_ShouldWork()
+    {
+        var activeNote = new Note { Id = Guid.NewGuid(), Content = "活动便签" };
+        var archiveNote = new Note { Id = Guid.NewGuid(), Content = "待归档便签" };
+
+        await _repository.SaveAsync(activeNote);
+        await _repository.SaveAsync(archiveNote);
+
+        await _repository.ArchiveNoteAsync(archiveNote.Id);
+
+        var activeList = await _repository.GetAllActiveAsync();
+        var archivedList = await _repository.GetAllArchivedAsync();
+
+        Assert.AreEqual(1, activeList.Count);
+        Assert.AreEqual(activeNote.Id, activeList[0].Id);
+
+        Assert.AreEqual(1, archivedList.Count);
+        Assert.AreEqual(archiveNote.Id, archivedList[0].Id);
+        Assert.IsTrue(archivedList[0].IsDeleted);
+        Assert.IsFalse(archivedList[0].IsOpen);
+    }
+
+    [TestMethod]
+    public async Task RestoreNoteAsync_ShouldMoveBackToActiveNotes()
+    {
+        var note = new Note { Id = Guid.NewGuid(), Content = "归档再恢复" };
+        await _repository.SaveAsync(note);
+        await _repository.ArchiveNoteAsync(note.Id);
+
+        var archived = await _repository.GetAllArchivedAsync();
+        Assert.AreEqual(1, archived.Count);
+
+        await _repository.RestoreNoteAsync(note.Id);
+
+        var archivedAfter = await _repository.GetAllArchivedAsync();
+        var activeAfter = await _repository.GetAllActiveAsync();
+
+        Assert.AreEqual(0, archivedAfter.Count);
+        Assert.AreEqual(1, activeAfter.Count);
+        Assert.IsFalse(activeAfter[0].IsDeleted);
+    }
+
+    [TestMethod]
+    public async Task ClearAllArchivedAsync_ShouldDeleteArchivedOnly()
+    {
+        var activeNote = new Note { Id = Guid.NewGuid(), Content = "保留的活动便签" };
+        var archive1 = new Note { Id = Guid.NewGuid(), Content = "归档 1" };
+        var archive2 = new Note { Id = Guid.NewGuid(), Content = "归档 2" };
+
+        await _repository.SaveAsync(activeNote);
+        await _repository.SaveAsync(archive1);
+        await _repository.SaveAsync(archive2);
+
+        await _repository.ArchiveNoteAsync(archive1.Id);
+        await _repository.ArchiveNoteAsync(archive2.Id);
+
+        await _repository.ClearAllArchivedAsync();
+
+        var archivedAfter = await _repository.GetAllArchivedAsync();
+        var activeAfter = await _repository.GetAllActiveAsync();
+
+        Assert.AreEqual(0, archivedAfter.Count);
+        Assert.AreEqual(1, activeAfter.Count);
+        Assert.AreEqual(activeNote.Id, activeAfter[0].Id);
+    }
 }
+

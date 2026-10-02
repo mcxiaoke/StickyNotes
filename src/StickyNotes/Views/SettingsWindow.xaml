@@ -1,0 +1,243 @@
+<ui:FluentWindow x:Class="StickyNotes.Views.SettingsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="彩色便签"
+                 Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
+                 Width="480" Height="680"
+                 MinWidth="420" MinHeight="560"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 Background="{StaticResource Fluent.WindowBgBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- 0: Fluent 沉浸式标题栏 -->
+            <RowDefinition Height="Auto" />
+            <!-- 1: 主内容区 -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 0. Fluent 标题栏 -->
+        <ui:TitleBar Grid.Row="0"
+                     Title="设置"
+                     Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
+                     ShowMaximize="False"
+                     ShowMinimize="True" />
+
+        <!-- 1. 设置内容滚动区 -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="{StaticResource Thickness.PageMargin}">
+                <!-- 顶部大标题 -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                    <ui:SymbolIcon Symbol="Settings24"
+                                   FontSize="22"
+                                   Foreground="{StaticResource Fluent.AccentBrush}"
+                                   Margin="0,0,8,0" />
+                    <TextBlock Text="设置"
+                               Style="{StaticResource Type.TitleLarge}" />
+                </StackPanel>
+
+                <!-- 分组 1: 外观与字体 -->
+                <TextBlock Text="外观与显示"
+                           Style="{StaticResource Type.Subtitle}"
+                           Margin="0,0,0,8" />
+
+                <Border CornerRadius="{StaticResource CornerRadius.Card}"
+                        Background="{StaticResource Fluent.CardBgBrush}"
+                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Padding="{StaticResource Thickness.CardPadding}"
+                        Margin="0,0,0,16"
+                        Effect="{StaticResource Elevation.Card}">
+                    <StackPanel>
+                        <!-- 字号调节行 -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="便签正文字号"
+                                           Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="调整桌面便签贴纸的正文字体大小，即时生效"
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <ComboBox Grid.Column="1"
+                                      Width="200"
+                                      ItemsSource="{Binding FontSizeOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedValuePath="Size"
+                                      SelectedValue="{Binding SelectedFontSize, Mode=TwoWay}"
+                                      VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
+
+                        <!-- 实时预览区 -->
+                        <TextBlock Text="文字效果实时预览："
+                                   Style="{StaticResource Type.CaptionSubtle}"
+                                   Margin="0,0,0,6" />
+                        <Border Background="{StaticResource Sticky.Yellow.BgBrush}"
+                                BorderBrush="{StaticResource Sticky.Yellow.BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource CornerRadius.Control}"
+                                Padding="12,10">
+                            <TextBlock Text="{Binding PreviewText}"
+                                       FontSize="{Binding SelectedFontSize}"
+                                       Foreground="{StaticResource Sticky.Yellow.TextBrush}"
+                                       TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- 分组 2: 数据备份与迁移 -->
+                <TextBlock Text="数据与备份"
+                           Style="{StaticResource Type.Subtitle}"
+                           Margin="0,0,0,8" />
+
+                <Border CornerRadius="{StaticResource CornerRadius.Card}"
+                        Background="{StaticResource Fluent.CardBgBrush}"
+                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Padding="{StaticResource Thickness.CardPadding}"
+                        Margin="0,0,0,16"
+                        Effect="{StaticResource Elevation.Card}">
+                    <StackPanel>
+                        <TextBlock Text="JSON 备份导入与导出"
+                                   Style="{StaticResource Type.BodyStrong}" />
+                        <TextBlock Text="将所有便签备份为标准 JSON 文件，或从备份文件还原便签数据"
+                                   Style="{StaticResource Type.CaptionSubtle}"
+                                   Margin="0,2,0,12" />
+
+                        <!-- 导出与导入按钮组 -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                            <ui:Button Appearance="Primary"
+                                       Content="导出便签 (JSON)"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,10,0"
+                                       Padding="14,6"
+                                       Command="{Binding ExportJsonCommand}">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="ArrowDownload24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+
+                            <ui:Button Appearance="Secondary"
+                                       Content="导入便签 (JSON)"
+                                       Padding="14,6"
+                                       Command="{Binding ImportJsonCommand}">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="ArrowUpload24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+                        </StackPanel>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
+
+                        <!-- 本地存储目录 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="本地数据目录"
+                                           Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="{Binding DataDirectoryPath}"
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <ui:Button Grid.Column="1"
+                                       Appearance="Secondary"
+                                       Content="打开目录"
+                                       Padding="12,4"
+                                       Command="{Binding OpenDataFolderCommand}"
+                                       VerticalAlignment="Center">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="FolderOpen24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- 分组 3: 关于与版本 -->
+                <TextBlock Text="关于"
+                           Style="{StaticResource Type.Subtitle}"
+                           Margin="0,0,0,8" />
+
+                <Border CornerRadius="{StaticResource CornerRadius.Card}"
+                        Background="{StaticResource Fluent.CardBgBrush}"
+                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Padding="{StaticResource Thickness.CardPadding}"
+                        Margin="0,0,0,16"
+                        Effect="{StaticResource Elevation.Card}">
+                    <StackPanel>
+                        <!-- 产品头部 -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <Image Source="pack://application:,,,/StickyNotes;component/Assets/AppIcon.png"
+                                   Width="36" Height="36"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Margin="0,0,12,0"
+                                   VerticalAlignment="Center" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="StickyNotes 彩色便签"
+                                           Style="{StaticResource Type.Subtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="基于 Windows 11 Fluent 2 现代桌面便签应用"
+                                           Style="{StaticResource Type.CaptionSubtle}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 元数据列表 -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="应用版本" Style="{StaticResource Type.CaptionSubtle}" />
+                            <TextBlock Grid.Column="1" Text="{Binding AppVersion}" Style="{StaticResource Type.BodyStrong}" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Git 提交" Style="{StaticResource Type.CaptionSubtle}" />
+                            <TextBlock Grid.Column="1" Text="{Binding GitCommit}" Style="{StaticResource Type.Caption}" FontFamily="Consolas" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="构建时间" Style="{StaticResource Type.CaptionSubtle}" />
+                            <TextBlock Grid.Column="1" Text="{Binding BuildTime}" Style="{StaticResource Type.Caption}" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="运行环境" Style="{StaticResource Type.CaptionSubtle}" />
+                            <TextBlock Grid.Column="1" Text="{Binding RuntimeInfo}" Style="{StaticResource Type.Caption}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</ui:FluentWindow>

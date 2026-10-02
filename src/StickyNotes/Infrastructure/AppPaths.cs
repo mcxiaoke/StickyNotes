@@ -45,6 +45,11 @@ public static class AppPaths
     public static string WindowConfigPath => Path.Combine(DataDirectory, "window.json");
 
     /// <summary>
+    /// 应用程序设置配置文件路径
+    /// </summary>
+    public static string SettingsPath => Path.Combine(DataDirectory, "settings.json");
+
+    /// <summary>
     /// 本地轮转备份目录
     /// </summary>
     public static string BackupsDirectory
