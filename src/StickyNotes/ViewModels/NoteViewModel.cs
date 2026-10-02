@@ -15,6 +15,7 @@ public partial class NoteViewModel : ObservableObject
 {
     private readonly INoteRepository _repository;
     private readonly AutoSaveCoordinator _autoSaveCoordinator;
+    private readonly SettingsService _settingsService;
 
     [ObservableProperty]
     private Note _note = new();
@@ -28,11 +29,27 @@ public partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     private bool _isPinned;
 
-    public NoteViewModel(INoteRepository repository, AutoSaveCoordinator autoSaveCoordinator)
+    [ObservableProperty]
+    private double _fontSize = 14.0;
+
+    public NoteViewModel(
+        INoteRepository repository,
+        AutoSaveCoordinator autoSaveCoordinator,
+        SettingsService? settingsService = null)
     {
         _repository = repository;
         _autoSaveCoordinator = autoSaveCoordinator;
+        _settingsService = settingsService ?? new SettingsService();
+
+        _fontSize = _settingsService.EditorFontSize;
+
+        // 监听字号全局调整
+        WeakReferenceMessenger.Default.Register<FontSizeChangedMessage>(this, (_, msg) =>
+        {
+            FontSize = msg.Value;
+        });
     }
+
 
     public void Initialize(Note note)
     {
@@ -79,9 +96,10 @@ public partial class NoteViewModel : ObservableObject
     public async Task DeleteAsync()
     {
         await _autoSaveCoordinator.FlushAsync(Note.Id);
-        await _repository.SoftDeleteAsync(Note.Id);
-        WeakReferenceMessenger.Default.Send(new NoteDeletedMessage(Note.Id));
+        await _repository.ArchiveNoteAsync(Note.Id);
+        WeakReferenceMessenger.Default.Send(new NoteArchivedMessage(Note.Id));
     }
+
 
     /// <summary>
     /// 立即强制刷盘当前便签

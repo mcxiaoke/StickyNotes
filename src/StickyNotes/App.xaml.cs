@@ -101,18 +101,25 @@ public partial class App : Application
         services.AddSingleton<SqliteDatabaseContext>();
         services.AddSingleton<INoteRepository, NoteRepository>();
 
-        // 领域服务
+        // 领域服务与配置
+        services.AddSingleton<SettingsService>();
+        services.AddSingleton<ExportImportService>();
         services.AddSingleton<ISearchService, SearchService>();
         services.AddSingleton<AutoSaveCoordinator>();
         services.AddSingleton<WindowManager>();
 
         // ViewModels
         services.AddSingleton<NotesListViewModel>();
+        services.AddSingleton<ArchivedNotesViewModel>();
+        services.AddSingleton<SettingsViewModel>();
         services.AddTransient<NoteViewModel>();
 
         // Views
         services.AddSingleton<NotesListWindow>();
+        services.AddTransient<ArchivedNotesWindow>();
+        services.AddTransient<SettingsWindow>();
     }
+
 }
 
 internal static class NativeMethods
@@ -132,7 +139,7 @@ internal static class NativeMethods
 
     public static void BringExistingInstanceToFront()
     {
-        var hWnd = FindWindow(null, "便签管理中心");
+        var hWnd = FindWindow(null, "彩色便签");
         if (hWnd != IntPtr.Zero)
         {
             ShowWindow(hWnd, SW_RESTORE);

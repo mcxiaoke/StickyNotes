@@ -161,10 +161,20 @@ public class TestEnvironment
 
         Thread.Sleep(120);
 
-        int pxW = (int)Math.Max(1, win.ActualWidth > 0 ? win.ActualWidth : width);
-        int pxH = (int)Math.Max(1, win.ActualHeight > 0 ? win.ActualHeight : height);
+        // 获取当前物理屏幕或窗口的真实 HiDPI 缩放比（如 150% 即 144 DPI，125% 即 120 DPI）
+        var dpi = VisualTreeHelper.GetDpi(win);
+        double scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        double scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+        double dpiX = dpi.PixelsPerInchX > 0 ? dpi.PixelsPerInchX : 96.0;
+        double dpiY = dpi.PixelsPerInchY > 0 ? dpi.PixelsPerInchY : 96.0;
 
-        var rtb = new RenderTargetBitmap(pxW, pxH, 96, 96, PixelFormats.Pbgra32);
+        double dipW = win.ActualWidth > 0 ? win.ActualWidth : width;
+        double dipH = win.ActualHeight > 0 ? win.ActualHeight : height;
+
+        int pxW = (int)Math.Max(1, Math.Round(dipW * scaleX));
+        int pxH = (int)Math.Max(1, Math.Round(dipH * scaleY));
+
+        var rtb = new RenderTargetBitmap(pxW, pxH, dpiX, dpiY, PixelFormats.Pbgra32);
         Visual target = win;
         if (win.AllowsTransparency && win.Content is Visual contentVisual)
         {
@@ -200,10 +210,13 @@ public class TestEnvironment
         element.Arrange(new Rect(0, 0, width, height));
         element.UpdateLayout();
 
-        int pxW = (int)Math.Max(1, width);
-        int pxH = (int)Math.Max(1, height);
+        // 默认按 150% (144 DPI) 或当前屏幕 DPI 渲染高清元素
+        double scale = 1.5;
+        double dpiValue = 144.0;
+        int pxW = (int)Math.Max(1, Math.Round(width * scale));
+        int pxH = (int)Math.Max(1, Math.Round(height * scale));
 
-        var rtb = new RenderTargetBitmap(pxW, pxH, 96, 96, PixelFormats.Pbgra32);
+        var rtb = new RenderTargetBitmap(pxW, pxH, dpiValue, dpiValue, PixelFormats.Pbgra32);
         rtb.Render(element);
 
         string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\..\.."));

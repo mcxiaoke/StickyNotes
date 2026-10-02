@@ -3,7 +3,8 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:models="clr-namespace:StickyNotes.Models"
-                 Title="便签管理中心"
+                 Title="彩色便签"
+                 Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
                  Width="480" Height="720"
                  MinWidth="380" MinHeight="520"
                  WindowStartupLocation="CenterScreen"
@@ -21,8 +22,8 @@
 
         <!-- 0. Fluent 标题栏 -->
         <ui:TitleBar Grid.Row="0"
-                     Title="便签管理中心"
-                     Icon="pack://application:,,,/Resources/App.ico"
+                     Title="彩色便签"
+                     Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
                      ShowMaximize="True"
                      ShowMinimize="True" />
 
@@ -48,27 +49,59 @@
 
                 <!-- 左侧品牌与标题 -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:SymbolIcon Symbol="Note24"
-                                   FontSize="22"
-                                   Foreground="{StaticResource Fluent.AccentBrush}"
-                                   Margin="0,0,8,0" />
+                    <Image Source="pack://application:,,,/StickyNotes;component/Assets/AppIcon.png"
+                           Width="28" Height="28"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           Margin="0,0,10,0"
+                           VerticalAlignment="Center" />
                     <TextBlock Text="便签"
                                Style="{StaticResource Type.TitleLarge}" />
                 </StackPanel>
 
-                <!-- 右侧新建便签按钮 (Windows 11 Accent 胶囊) -->
-                <ui:Button Grid.Column="1"
-                           Appearance="Primary"
-                           Content="新建便签"
-                           FontWeight="SemiBold"
-                           Padding="14,6"
-                           ToolTip="新建一张便签 (Ctrl+N)"
-                           Command="{Binding NewNoteCommand}">
-                    <ui:Button.Icon>
-                        <ui:SymbolIcon Symbol="Add24" />
-                    </ui:Button.Icon>
-                </ui:Button>
+                <!-- 右侧操作群：已归档、设置、新建（高度统一 32px） -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 已归档入口按钮 -->
+                    <ui:Button Appearance="Secondary"
+                               Content="已归档"
+                               Height="32"
+                               Padding="10,0"
+                               ToolTip="查看已归档便签"
+                               Margin="0,0,6,0"
+                               Click="OpenArchiveButton_Click">
+                        <ui:Button.Icon>
+                            <ui:SymbolIcon Symbol="Archive24" FontSize="15" />
+                        </ui:Button.Icon>
+                    </ui:Button>
+
+                    <!-- 设置入口按钮 -->
+                    <ui:Button Appearance="Secondary"
+                               Content="设置"
+                               Height="32"
+                               Padding="10,0"
+                               ToolTip="设置"
+                               Margin="0,0,6,0"
+                               Click="OpenSettingsButton_Click">
+                        <ui:Button.Icon>
+                            <ui:SymbolIcon Symbol="Settings24" FontSize="15" />
+                        </ui:Button.Icon>
+                    </ui:Button>
+
+                    <!-- 新建便签按钮 (Windows 11 Accent 胶囊) -->
+                    <ui:Button Appearance="Primary"
+                               Content="新建"
+                               FontWeight="SemiBold"
+                               Height="32"
+                               Padding="12,0"
+                               ToolTip="新建一张便签 (Ctrl+N)"
+                               Command="{Binding NewNoteCommand}">
+                        <ui:Button.Icon>
+                            <ui:SymbolIcon Symbol="Add24" FontSize="15" />
+                        </ui:Button.Icon>
+                    </ui:Button>
+                </StackPanel>
             </Grid>
+
+
 
             <!-- 1.2 现代 Fluent 搜索栏 -->
             <ui:TextBox x:Name="SearchBox"
@@ -151,16 +184,44 @@
                         <ItemsControl ItemsSource="{Binding FilteredNotes}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type models:Note}">
-                                    <!-- 一体化高雅卡片：通体原色融合，消除割裂色带 -->
+                                    <!-- 一体化高雅卡片：通体原色融合，自适应 1~4 行纯文本，支持悬浮上浮效果 -->
                                     <Border Margin="0,0,0,10"
                                             CornerRadius="{StaticResource CornerRadius.Card}"
                                             Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
                                             BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
                                             BorderThickness="1"
                                             Padding="{StaticResource Thickness.CardPadding}"
-                                            Effect="{StaticResource Elevation.Card}"
-                                            Cursor="Hand"
                                             MouseLeftButtonDown="NoteCard_MouseLeftButtonDown">
+                                        <!-- 鼠标滑过微悬浮与立体阴影动效 -->
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect BlurRadius="6" ShadowDepth="1.5" Opacity="0.08" Direction="270" />
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Setter Property="RenderTransform">
+                                                    <Setter.Value>
+                                                        <TranslateTransform Y="0" />
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Effect">
+                                                            <Setter.Value>
+                                                                <DropShadowEffect BlurRadius="12" ShadowDepth="3" Opacity="0.18" Direction="270" />
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                        <Setter Property="RenderTransform">
+                                                            <Setter.Value>
+                                                                <TranslateTransform Y="-1.5" />
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+
                                         <Border.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Header="打开便签" Click="ContextOpenNote_Click">
@@ -174,9 +235,9 @@
                                                     </MenuItem.Icon>
                                                 </MenuItem>
                                                 <Separator />
-                                                <MenuItem Header="删除便签" Click="ContextDeleteNote_Click" Foreground="{StaticResource Fluent.DangerBrush}">
+                                                <MenuItem Header="归档便签" Click="ContextDeleteNote_Click" Foreground="{StaticResource Fluent.DangerBrush}">
                                                     <MenuItem.Icon>
-                                                        <ui:SymbolIcon Symbol="Delete20" FontSize="16" Foreground="{StaticResource Fluent.DangerBrush}" />
+                                                        <ui:SymbolIcon Symbol="Archive20" FontSize="16" Foreground="{StaticResource Fluent.DangerBrush}" />
                                                     </MenuItem.Icon>
                                                 </MenuItem>
                                             </ContextMenu>
@@ -200,32 +261,39 @@
                                             <!-- 右侧卡片内容区 -->
                                             <Grid Grid.Column="1">
                                                 <Grid.RowDefinitions>
-                                                    <!-- 标题与操作栏 -->
-                                                    <RowDefinition Height="Auto" />
-                                                    <!-- 内容摘要 -->
+                                                    <!-- 纯文本内容与操作栏 -->
                                                     <RowDefinition Height="*" />
                                                     <!-- 底部信息 -->
                                                     <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
 
-                                                <!-- 标题与右上角快捷操作 -->
-                                                <Grid Grid.Row="0">
+                                                <!-- 上部：纯文本（统一字体不加粗，自适应 1~4 行）与右上角操作区 -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,6">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
 
-                                                    <TextBlock Text="{Binding DisplayTitle}"
-                                                               Style="{StaticResource Type.Subtitle}"
+                                                    <!-- 纯文本正文：按需显示，最小一行，最多4行 -->
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding PreviewText}"
+                                                               Style="{StaticResource Type.Body}"
+                                                               FontWeight="Normal"
+                                                               FontSize="13"
                                                                Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
-                                                               VerticalAlignment="Center" />
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               LineHeight="20"
+                                                               MaxHeight="80"
+                                                               VerticalAlignment="Top"
+                                                               Margin="0,2,8,0" />
 
                                                     <!-- 右侧图钉与更多操作 -->
-                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
                                                         <ui:SymbolIcon Symbol="Pin20"
                                                                        FontSize="13"
-                                                                       Margin="0,0,4,0"
-                                                                       VerticalAlignment="Center"
+                                                                       Margin="0,3,4,0"
+                                                                       VerticalAlignment="Top"
                                                                        Foreground="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
                                                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibilityConverter}}" />
                                                         <Button Style="{StaticResource StickyToolbarButtonStyle}"
@@ -238,16 +306,8 @@
                                                     </StackPanel>
                                                 </Grid>
 
-                                                <!-- 便签两行文本摘要 -->
-                                                <TextBlock Grid.Row="1"
-                                                           Text="{Binding Snippet}"
-                                                           Style="{StaticResource Type.Body}"
-                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
-                                                           MaxHeight="36"
-                                                           Margin="0,6,0,8" />
-
                                                 <!-- 底部时间戳与状态信息 -->
-                                                <Grid Grid.Row="2">
+                                                <Grid Grid.Row="1">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
@@ -263,10 +323,11 @@
 
                                                     <!-- 友好更新时间 -->
                                                     <TextBlock Grid.Column="1"
-                                                               Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}}"
-                                                               Style="{StaticResource Type.Caption}"
+                                                               Style="{StaticResource Type.CaptionSubtle}"
                                                                Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
-                                                               VerticalAlignment="Center" />
+                                                               HorizontalAlignment="Right"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}}" />
                                                 </Grid>
                                             </Grid>
                                         </Grid>
@@ -274,6 +335,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
 
                         <!-- 空状态引导视图 -->
                         <StackPanel HorizontalAlignment="Center"

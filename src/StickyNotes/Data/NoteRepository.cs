@@ -42,6 +42,57 @@ public sealed class NoteRepository : INoteRepository
         return list;
     }
 
+    public async Task<IReadOnlyList<Note>> GetAllArchivedAsync(CancellationToken cancellationToken = default)
+    {
+        var list = new List<Note>();
+        await using var connection = _context.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                Id, Content, Color, IsPinned, IsDeleted,
+                WindowX, WindowY, WindowWidth, WindowHeight, IsOpen,
+                CreatedAt, UpdatedAt
+            FROM Notes
+            WHERE IsDeleted = 1
+            ORDER BY UpdatedAt DESC;
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(ReadNote(reader));
+        }
+
+        return list;
+    }
+
+    public async Task<IReadOnlyList<Note>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        var list = new List<Note>();
+        await using var connection = _context.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                Id, Content, Color, IsPinned, IsDeleted,
+                WindowX, WindowY, WindowWidth, WindowHeight, IsOpen,
+                CreatedAt, UpdatedAt
+            FROM Notes
+            ORDER BY UpdatedAt DESC;
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(ReadNote(reader));
+        }
+
+        return list;
+    }
+
     public async Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var connection = _context.CreateConnection();
@@ -115,13 +166,35 @@ public sealed class NoteRepository : INoteRepository
 
     public async Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        await ArchiveNoteAsync(id, cancellationToken);
+    }
+
+    public async Task ArchiveNoteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
         await using var connection = _context.CreateConnection();
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE Notes
-            SET IsDeleted = 1, UpdatedAt = $updatedAt
+            SET IsDeleted = 1, IsOpen = 0, UpdatedAt = $updatedAt
+            WHERE Id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", id.ToString());
+        command.Parameters.AddWithValue("$updatedAt", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task RestoreNoteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var connection = _context.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE Notes
+            SET IsDeleted = 0, UpdatedAt = $updatedAt
             WHERE Id = $id;
             """;
         command.Parameters.AddWithValue("$id", id.ToString());
@@ -141,6 +214,18 @@ public sealed class NoteRepository : INoteRepository
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    public async Task ClearAllArchivedAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = _context.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM Notes WHERE IsDeleted = 1;";
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
 
     public async Task UpdateWindowBoundsAsync(
         Guid id,

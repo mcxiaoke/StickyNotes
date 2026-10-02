@@ -65,6 +65,11 @@ public sealed class Note
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// 纯文本卡片显示：去除首尾空白，按需显示1~4行；无内容时显示“（空白便签）”
+    /// </summary>
+    public string PreviewText => string.IsNullOrWhiteSpace(Content) ? "（空白便签）" : Content.Trim();
+
+    /// <summary>
     /// 动态计算标题：智能扫描第一行非空白文本，截取最多 40 字符；无内容时显示“（空白便签）”
     /// </summary>
     public string DisplayTitle

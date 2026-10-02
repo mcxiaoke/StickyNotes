@@ -4,10 +4,18 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon Condition="Exists('Resources/App.ico')">Resources/App.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>StickyNotes</RootNamespace>
     <AssemblyName>StickyNotes</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 应用程序视觉图标资源 -->
+    <Resource Include="Assets\AppIcon.ico" />
+    <Resource Include="Assets\AppIcon.png" />
+    <Resource Include="Resources\App.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- 核心轻量依赖 -->

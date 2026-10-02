@@ -61,7 +61,10 @@ public partial class NotesListViewModel : ObservableObject
         WeakReferenceMessenger.Default.Register<NoteUpdatedMessage>(this, (_, msg) => HandleNoteUpdated(msg.Value));
         WeakReferenceMessenger.Default.Register<NoteDeletedMessage>(this, (_, msg) => HandleNoteDeleted(msg.Value));
         WeakReferenceMessenger.Default.Register<NoteCreatedMessage>(this, (_, msg) => HandleNoteCreated(msg.Value));
+        WeakReferenceMessenger.Default.Register<NoteArchivedMessage>(this, (_, msg) => HandleNoteDeleted(msg.Value));
+        WeakReferenceMessenger.Default.Register<NoteRestoredMessage>(this, (_, msg) => HandleNoteRestored(msg.Value));
     }
+
 
     /// <summary>
     /// 加载所有未删除的活动便签
@@ -164,10 +167,12 @@ public partial class NotesListViewModel : ObservableObject
     public async Task DeleteNoteAsync(Note note)
     {
         _windowManager.CloseNoteWindow(note.Id);
-        await _repository.SoftDeleteAsync(note.Id);
+        await _repository.ArchiveNoteAsync(note.Id);
         Notes.Remove(note);
         HasNoNotes = Notes.Count == 0;
         RefreshFilterNotification();
+
+        WeakReferenceMessenger.Default.Send(new NoteArchivedMessage(note.Id));
 
         // 重新同步搜索状态
         if (IsSearching)
@@ -177,10 +182,23 @@ public partial class NotesListViewModel : ObservableObject
     }
 
     [RelayCommand]
+    public void OpenArchive()
+    {
+        _windowManager.OpenOrActivateArchivedNotesWindow();
+    }
+
+    [RelayCommand]
+    public void OpenSettings()
+    {
+        _windowManager.OpenOrActivateSettingsWindow();
+    }
+
+    [RelayCommand]
     public void SelectSearchHit(SearchHit hit)
     {
         _windowManager.NavigateToHit(hit);
     }
+
 
     private void RefreshFilterNotification()
     {
@@ -239,8 +257,35 @@ public partial class NotesListViewModel : ObservableObject
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
-            Notes.Insert(0, note);
-            RefreshFilterNotification();
+            if (note.Id != Guid.Empty && !Notes.Any(n => n.Id == note.Id))
+            {
+                Notes.Insert(0, note);
+                HasNoNotes = false;
+                RefreshFilterNotification();
+            }
+            else
+            {
+                // 若为空对象触发的刷新（如导入完成），重载全量便签
+                _ = LoadNotesAsync();
+            }
+        });
+    }
+
+    private void HandleNoteRestored(Note note)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            if (!Notes.Any(n => n.Id == note.Id))
+            {
+                Notes.Insert(0, note);
+                HasNoNotes = false;
+                RefreshFilterNotification();
+                if (IsSearching)
+                {
+                    OnSearchTextChanged(SearchText);
+                }
+            }
         });
     }
 }
+

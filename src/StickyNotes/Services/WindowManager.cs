@@ -15,6 +15,8 @@ public sealed class WindowManager
     private readonly IServiceProvider _serviceProvider;
     private readonly INoteRepository _repository;
     private readonly Dictionary<Guid, NoteWindow> _activeNoteWindows = new();
+    private ArchivedNotesWindow? _archivedNotesWindow;
+    private SettingsWindow? _settingsWindow;
 
     public WindowManager(IServiceProvider serviceProvider, INoteRepository repository)
     {
@@ -121,6 +123,46 @@ public sealed class WindowManager
         {
             win.JumpToSearchHit(hit.CharIndex, hit.Length);
         });
+    }
+
+    /// <summary>
+    /// 打开或激活已归档管理窗口
+    /// </summary>
+    public ArchivedNotesWindow OpenOrActivateArchivedNotesWindow()
+    {
+        if (_archivedNotesWindow != null && _archivedNotesWindow.IsLoaded)
+        {
+            if (_archivedNotesWindow.WindowState == WindowState.Minimized)
+                _archivedNotesWindow.WindowState = WindowState.Normal;
+            _archivedNotesWindow.Activate();
+            return _archivedNotesWindow;
+        }
+
+        _archivedNotesWindow = _serviceProvider.GetRequiredService<ArchivedNotesWindow>();
+        _archivedNotesWindow.Closed += (_, _) => _archivedNotesWindow = null;
+        _archivedNotesWindow.Show();
+        _archivedNotesWindow.Activate();
+        return _archivedNotesWindow;
+    }
+
+    /// <summary>
+    /// 打开或激活独立设置窗口
+    /// </summary>
+    public SettingsWindow OpenOrActivateSettingsWindow()
+    {
+        if (_settingsWindow != null && _settingsWindow.IsLoaded)
+        {
+            if (_settingsWindow.WindowState == WindowState.Minimized)
+                _settingsWindow.WindowState = WindowState.Normal;
+            _settingsWindow.Activate();
+            return _settingsWindow;
+        }
+
+        _settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+        _settingsWindow.Activate();
+        return _settingsWindow;
     }
 
     /// <summary>

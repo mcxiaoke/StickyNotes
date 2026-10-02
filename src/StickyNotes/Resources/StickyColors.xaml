@@ -16,6 +16,7 @@
     <SolidColorBrush x:Key="Fluent.SubtleBorderBrush" Color="#1E000000" />
     <SolidColorBrush x:Key="Fluent.ControlBorderBrush" Color="#26000000" />
     <SolidColorBrush x:Key="Fluent.CardDefaultBgBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Fluent.CardBgBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="Fluent.WindowBgBrush" Color="#F9F9FB" />
 
     <!-- 1. 经典黄 Yellow -->
