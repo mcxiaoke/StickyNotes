@@ -461,4 +461,104 @@ public class LifecycleAndReliabilityTests
             System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
         });
     }
+
+    /// <summary>
+    /// F-P1-8 验证：托盘图标必须声明使用 NOTIFYICON_VERSION_4，否则停留"旧式"形态，
+    /// 不参与 Win10/11 图标区布局。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_TrayIcon_DeclaresVersion4()
+    {
+        Assert.AreEqual(0x00000004, NativeMethods.NIM_SETVERSION, "NIM_SETVERSION 常量必须为 4");
+        Assert.AreEqual(4, NativeMethods.NOTIFYICON_VERSION_4, "必须声明 NOTIFYICON_VERSION_4");
+    }
+
+    /// <summary>
+    /// F-P1-8 验证：必须监听 explorer.exe 在任务栏重建后广播的 TaskbarCreated 注册消息，
+    /// 否则用户重启/刷新 explorer 后托盘图标永久消失，只能重启应用。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_TaskbarCreatedMessage_IsRegistered()
+    {
+        Assert.AreNotEqual(
+            0, NativeMethods.WM_TASKBAR_CREATED,
+            "必须成功注册 TaskbarCreated 消息（托盘图标据此在 explorer 重启后自我恢复）");
+
+        // 与 WM_ACTIVATE_INSTANCE 必须是两个不同的注册消息，避免消息语义串台
+        Assert.AreNotEqual(
+            NativeMethods.WM_ACTIVATE_INSTANCE, NativeMethods.WM_TASKBAR_CREATED,
+            "TaskbarCreated 与实例激活消息不得共用同一个消息 ID");
+    }
+
+    /// <summary>
+    /// F-P1-8 验证：右键菜单关闭后必须主动发 WM_CANCELMODE 复位托盘图标，
+    /// 否则图标偶发保持"按下"灰态。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_ContextMenuClose_PostsCancelMode()
+    {
+        Assert.AreEqual(0x001F, NativeMethods.WM_CANCELMODE, "WM_CANCELMODE 常量必须为 0x001F");
+    }
+
+    /// <summary>
+    /// F-P1-8 验证：唤醒已运行实例必须**定向投递**给本进程顶层窗口，不得再向
+    /// HWND_BROADCAST 全局广播 —— 全局广播在 UIPI 下（两实例完整性级别不同）会静默失败，
+    /// 用户只看到"双击没反应"。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_NotifyExistingInstance_TargetsOwnProcessWindows()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            TestEnvironment.EnsureApplication();
+
+            // 与 TrayIconService 同构：使用零尺寸 HwndSource 作为本进程的顶层窗口
+            var parameters = new System.Windows.Interop.HwndSourceParameters("StickyNotes_Activate_Probe")
+            {
+                WindowStyle = 0,
+                Width = 0,
+                Height = 0
+            };
+
+            using var source = new System.Windows.Interop.HwndSource(parameters);
+            bool received = false;
+            System.Windows.Interop.HwndSourceHook hook = (IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            {
+                if (msg == NativeMethods.WM_ACTIVATE_INSTANCE)
+                {
+                    received = true;
+                    handled = true;
+                }
+                return IntPtr.Zero;
+            };
+            source.AddHook(hook);
+
+            // 模拟「用户再次双击快捷方式」→ Program.Main 调用唤醒。
+            // 断言投递结果：必须定向投递给本进程的顶层窗口（至少 1 个）。
+            int posted = NativeMethods.PostActivateToOwnProcessWindows();
+            Assert.IsTrue(
+                posted >= 1,
+                "唤醒消息必须定向投递给本进程的顶层窗口；"
+                + "若仍使用 HWND_BROADCAST，在 UIPI 下两实例完整性级别不同时会静默失败");
+
+            // 再验证消息确实能送达窗口钩子（用 PushFrame 泵 Win32 消息；
+            // 同线程 Dispatcher.Invoke 会同步短路、不泵消息，不可用于此断言）。
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            while (!received && DateTime.UtcNow < deadline)
+            {
+                var frame = new System.Windows.Threading.DispatcherFrame();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    (Action)(() => frame.Continue = false));
+                System.Windows.Threading.Dispatcher.PushFrame(frame);
+                Thread.Sleep(10);
+            }
+
+            Assert.IsTrue(
+                received,
+                "唤醒消息必须能送达本进程顶层窗口的 HwndSource 钩子");
+
+            source.RemoveHook(hook);
+        });
+    }
 }

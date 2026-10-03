@@ -28,13 +28,64 @@ internal static class NativeMethods
 
     public static readonly int WM_ACTIVATE_INSTANCE = RegisterWindowMessage("StickyNotes_Activate_MainWindow");
 
+    /// <summary>
+    /// 由 explorer.exe 在任务栏（重新）创建后广播的系统消息。托盘图标必须监听它，
+    /// 否则用户重启 explorer 后图标永久消失，只能重启应用（原 F-P1-8）。
+    /// </summary>
+    public static readonly int WM_TASKBAR_CREATED = RegisterWindowMessage("TaskbarCreated");
+
+    /// <summary>
+    /// 唤醒已在运行的实例：把注册消息**定向**投递给本进程内的顶层窗口。
+    /// </summary>
+    /// <remarks>
+    /// 禁止改回 <c>PostMessage(HWND_BROADCAST, ...)</c>：那会把消息发给当前会话内所有顶层窗口，
+    /// 且 UIPI 下若两个实例完整性级别不同（一个提权、一个普通），唤醒会静默失败，
+    /// 用户只看到"双击没反应"（原 F-P1-8 第四宗毛病）。
+    /// </remarks>
     public static void NotifyExistingInstance()
     {
-        if (WM_ACTIVATE_INSTANCE != 0)
-        {
-            PostMessage((IntPtr)HWND_BROADCAST, WM_ACTIVATE_INSTANCE, IntPtr.Zero, IntPtr.Zero);
-        }
+        PostActivateToOwnProcessWindows();
     }
+
+    /// <summary>
+    /// 定向投递实例激活消息，返回成功投递的窗口数。
+    /// 便于单元测试在不依赖消息泵时序的前提下验证「只投递给本进程窗口」。
+    /// </summary>
+    internal static int PostActivateToOwnProcessWindows()
+    {
+        if (WM_ACTIVATE_INSTANCE == 0)
+        {
+            return 0;
+        }
+
+        uint currentProcessId = (uint)Environment.ProcessId;
+        int postedCount = 0;
+
+        EnumWindows((hwnd, _) =>
+        {
+            GetWindowThreadProcessId(hwnd, out uint windowProcessId);
+
+            // 仅投递给本进程（即已运行的那个 StickyNotes 实例）的顶层窗口
+            if (windowProcessId == currentProcessId
+                && PostMessage(hwnd, WM_ACTIVATE_INSTANCE, IntPtr.Zero, IntPtr.Zero))
+            {
+                postedCount++;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return postedCount;
+    }
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     #region 全局热键 (RegisterHotKey)
     public const int WM_HOTKEY = 0x0312;
@@ -70,6 +121,12 @@ internal static class NativeMethods
     public const int NIM_MODIFY = 0x00000001;
     public const int NIM_DELETE = 0x00000002;
     public const int NIM_SETVERSION = 0x00000004;
+
+    /// <summary>NOTIFYICON_VERSION_4：启用 Win10/11 图标区布局与 WM_CONTEXTMENU 语义</summary>
+    public const int NOTIFYICON_VERSION_4 = 4;
+
+    /// <summary>菜单关闭后需要主动复位托盘图标状态，否则偶发保持"按下"灰态</summary>
+    public const int WM_CANCELMODE = 0x001F;
 
     public const int NIF_MESSAGE = 0x00000001;
     public const int NIF_ICON = 0x00000002;

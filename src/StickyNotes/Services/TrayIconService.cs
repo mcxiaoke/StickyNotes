@@ -75,21 +75,41 @@ public sealed class TrayIconService : IDisposable
             uFlags = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP,
             uCallbackMessage = NativeMethods.WM_TRAYICON,
             hIcon = _hIcon,
-            szTip = "彩色便签 (StickyNotes)"
+            szTip = "StickyNotes 便签"
         };
+
+        CreateIcon();
+        CreateContextMenu();
+    }
+
+    /// <summary>
+    /// 向 Shell 注册（或重新注册）托盘图标，并声明使用版本 4 行为。
+    /// </summary>
+    private void CreateIcon()
+    {
+        if (_hwndSource == null)
+        {
+            return;
+        }
 
         bool ok = NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_ADD, ref _nid);
         if (ok)
         {
             _isCreated = true;
-            AppLog.Info("[TrayIconService] 系统托盘图标创建成功");
+
+            // 必须紧接着调用 NIM_SETVERSION：否则图标停留在"旧式"形态，
+            // 不参与 Win10/11 图标区布局（原 F-P1-8 第二宗毛病）。
+            var versionData = _nid;
+            versionData.uTimeoutOrVersion = NativeMethods.NOTIFYICON_VERSION_4;
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_SETVERSION, ref versionData);
+
+            AppLog.Info("[TrayIconService] 系统托盘图标创建成功（版本 4）");
         }
         else
         {
+            _isCreated = false;
             AppLog.Warn("[TrayIconService] 系统托盘图标创建失败");
         }
-
-        CreateContextMenu();
     }
 
     private void CreateContextMenu()
@@ -130,6 +150,17 @@ public sealed class TrayIconService : IDisposable
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // explorer.exe 重启 / 崩溃恢复后会广播 TaskbarCreated：此时旧图标已失效，
+        // 必须重建，否则托盘图标永久消失（原 F-P1-8 第一宗毛病）。
+        if (msg == NativeMethods.WM_TASKBAR_CREATED && NativeMethods.WM_TASKBAR_CREATED != 0)
+        {
+            AppLog.Info("[TrayIconService] 检测到任务栏重建（explorer 重启），正在恢复托盘图标");
+            _isCreated = false;
+            CreateIcon();
+            handled = true;
+            return IntPtr.Zero;
+        }
+
         if (msg == NativeMethods.WM_TRAYICON)
         {
             int eventId = lParam.ToInt32();
@@ -153,8 +184,23 @@ public sealed class TrayIconService : IDisposable
         if (_contextMenu == null || _hwndSource == null) return;
 
         NativeMethods.SetForegroundWindow(_hwndSource.Handle);
+
+        // 菜单关闭后必须主动发 WM_CANCELMODE 复位托盘图标状态，
+        // 否则图标会偶发保持"按下"的灰色高亮态（原 F-P1-8 第三宗毛病）。
+        _contextMenu.Closed -= ContextMenu_Closed;
+        _contextMenu.Closed += ContextMenu_Closed;
+
         _contextMenu.Placement = PlacementMode.MousePoint;
         _contextMenu.IsOpen = true;
+    }
+
+    private void ContextMenu_Closed(object? sender, RoutedEventArgs e)
+    {
+        var handle = _hwndSource?.Handle ?? IntPtr.Zero;
+        if (handle != IntPtr.Zero)
+        {
+            NativeMethods.PostMessage(handle, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+        }
     }
 
     public void Dispose()
