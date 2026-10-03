@@ -15,7 +15,24 @@ public sealed class NoteBackupItem
     public Guid Id { get; set; }
     public string Content { get; set; } = string.Empty;
     public NoteColor Color { get; set; } = NoteColor.Yellow;
+
+    /// <summary>
+    /// 旧版（v1 备份）唯一的置顶标志，导出时写为「列表置顶」以保持向下兼容。
+    /// 导入时**仅在 V2 两列缺失**的回退路径上被读取，禁止用它直接赋值给 <see cref="Note.IsPinned"/>。
+    /// </summary>
     public bool IsPinned { get; set; }
+
+    /// <summary>是否在便签列表中置顶（V2 拆列后必须独立往返，null = 备份未记录该字段）</summary>
+    public bool? IsPinnedInList { get; set; }
+
+    /// <summary>是否在桌面最顶层悬浮（null = 备份未记录该字段）</summary>
+    public bool? AlwaysOnTop { get; set; }
+
+    /// <summary>
+    /// 导出时该便签是否处于打开状态（null = 旧备份未记录，导入时按既有行为回落为不还原窗口）
+    /// </summary>
+    public bool? IsOpen { get; set; }
+
     public bool IsDeleted { get; set; }
     public double WindowX { get; set; } = 150;
     public double WindowY { get; set; } = 150;
@@ -79,7 +96,12 @@ public sealed class ExportImportService
                     Id = n.Id,
                     Content = n.Content,
                     Color = n.Color,
-                    IsPinned = n.IsPinned,
+                    // 兼容字段：旧版备份只有 IsPinned，写为「列表置顶」，避免旧版本误把桌面置顶也一起打开
+                    IsPinned = n.IsPinnedInList,
+                    // V2 三态独立往返（原 F-P1-2 子问题 1、3）
+                    IsPinnedInList = n.IsPinnedInList,
+                    AlwaysOnTop = n.AlwaysOnTop,
+                    IsOpen = n.IsOpen,
                     IsDeleted = n.IsDeleted,
                     WindowX = n.WindowX,
                     WindowY = n.WindowY,
@@ -169,13 +191,19 @@ public sealed class ExportImportService
                 Id = noteId,
                 Content = item.Content ?? string.Empty,
                 Color = item.Color,
-                IsPinned = item.IsPinned,
+                // 置顶：优先读 V2 独立字段；旧备份缺该字段时回落 IsPinned（回落到「列表置顶」，
+                // 绝不再触发 Note.IsPinned 兼容 setter 的「一写两改」强行合并两种置顶语义）。原 F-P1-2 子问题 1。
+                IsPinnedInList = item.IsPinnedInList ?? item.IsPinned,
+                // 旧备份只记录了一个合并语义的 IsPinned：一律回落到「列表置顶」，
+                // 绝不顺带打开桌面置顶（否则旧备份会把桌面窗口全部弹开）。
+                AlwaysOnTop = item.AlwaysOnTop ?? false,
                 IsDeleted = item.IsDeleted,
                 WindowX = item.WindowX > 0 ? item.WindowX : 150,
                 WindowY = item.WindowY > 0 ? item.WindowY : 150,
                 WindowWidth = item.WindowWidth >= 280 ? item.WindowWidth : 380,
                 WindowHeight = item.WindowHeight >= 240 ? item.WindowHeight : 420,
-                IsOpen = false,
+                // 旧备份未记录 IsOpen 时保持既有行为（导入后不自动弹出窗口），仅在备份明确记录时还原
+                IsOpen = item.IsOpen ?? false,
                 CreatedAt = item.CreatedAt != default ? item.CreatedAt : DateTime.UtcNow,
                 UpdatedAt = item.UpdatedAt != default ? item.UpdatedAt : DateTime.UtcNow
             };

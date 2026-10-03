@@ -61,6 +61,17 @@ public sealed class NoteRestoredMessage : ValueChangedMessage<Note>
 }
 
 /// <summary>
+/// 请求主列表全量重载便签消息（用于导入备份、批量外部变更等无法逐条反映的场景）。
+/// </summary>
+/// <remarks>
+/// 导入备份后**必须**用本消息触发 <c>LoadNotesAsync</c> 全量重载，不得再借用
+/// <see cref="NoteCreatedMessage"/> + <c>new Note()</c> 的老写法：<see cref="Note.Id"/>
+/// 的属性初始化器是 <c>Guid.NewGuid()</c>，"Id 恒非 Guid.Empty"，那条路径会走"插入单张卡片"
+/// 分支，凭空插入一张空白且未持久化的幽灵便签，而真实导入的便签要等重启才可见（原 F-P1-2 子问题 2）。
+/// </remarks>
+public sealed class NotesReloadedRequestedMessage { }
+
+/// <summary>
 /// 便签编辑器字体大小变更消息
 /// </summary>
 public sealed class FontSizeChangedMessage : ValueChangedMessage<double>

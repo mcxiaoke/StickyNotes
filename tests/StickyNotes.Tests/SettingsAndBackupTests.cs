@@ -1,9 +1,13 @@
 using System.IO;
+using System.Threading;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using StickyNotes.Data;
 using StickyNotes.Infrastructure;
+using StickyNotes.Messages;
 using StickyNotes.Models;
 using StickyNotes.Services;
+using StickyNotes.ViewModels;
 
 namespace StickyNotes.Tests;
 
@@ -226,5 +230,221 @@ public class SettingsAndBackupTests
         Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "notes_backup.db"), now));
         Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-notadate.log"), now));
         Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-20260901.log.bak"), now));
+    }
+
+    /// <summary>
+    /// F-P1-2 验证：导出/导入必须让「列表置顶」「桌面置顶」「窗口是否打开」三种状态独立往返，
+    /// 不得因为 Note.IsPinned 兼容 setter 的「一写两改」把两种置顶语义强行合并。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P1_2_ExportImport_PreservesThreeIndependentStates()
+    {
+        var dbPath = Path.Combine(_testDir, "states.db");
+        var dbContext = new SqliteDatabaseContext(dbPath);
+        await dbContext.InitializeAndMigrateAsync();
+        var repo = new NoteRepository(dbContext);
+        var service = new ExportImportService(repo);
+
+        // 三种组合各一条：仅列表置顶 / 仅桌面置顶 / 两者皆无但窗口开着
+        var listPinnedOnly = new Note
+        {
+            Id = Guid.NewGuid(),
+            Content = "仅列表置顶",
+            IsPinnedInList = true,
+            AlwaysOnTop = false,
+            IsOpen = true
+        };
+        var desktopPinnedOnly = new Note
+        {
+            Id = Guid.NewGuid(),
+            Content = "仅桌面置顶",
+            IsPinnedInList = false,
+            AlwaysOnTop = true,
+            IsOpen = true
+        };
+        var plainOpen = new Note
+        {
+            Id = Guid.NewGuid(),
+            Content = "无置顶但打开着",
+            IsPinnedInList = false,
+            AlwaysOnTop = false,
+            IsOpen = true
+        };
+
+        await repo.SaveAsync(listPinnedOnly);
+        await repo.SaveAsync(desktopPinnedOnly);
+        await repo.SaveAsync(plainOpen);
+
+        var exportFile = Path.Combine(_testDir, "states.json");
+        Assert.AreEqual(3, await service.ExportNotesAsync(exportFile));
+
+        // 还原到全新库
+        var newDbContext = new SqliteDatabaseContext(Path.Combine(_testDir, "states_restored.db"));
+        await newDbContext.InitializeAndMigrateAsync();
+        var newRepo = new NoteRepository(newDbContext);
+        var imported = await new ExportImportService(newRepo).ImportNotesAsync(exportFile);
+        Assert.AreEqual(3, imported, "三条便签都应导入成功");
+
+        var restored = await newRepo.GetAllAsync();
+        var byId = restored.ToDictionary(n => n.Id);
+
+        Assert.IsTrue(byId[listPinnedOnly.Id].IsPinnedInList, "「仅列表置顶」必须保持");
+        Assert.IsFalse(byId[listPinnedOnly.Id].AlwaysOnTop, "「仅列表置顶」不得被兼容 setter 顺带打开桌面置顶");
+
+        Assert.IsFalse(byId[desktopPinnedOnly.Id].IsPinnedInList, "「仅桌面置顶」不得被写成列表置顶");
+        Assert.IsTrue(byId[desktopPinnedOnly.Id].AlwaysOnTop, "「仅桌面置顶」必须保持");
+
+        Assert.IsTrue(byId[plainOpen.Id].IsOpen, "备份记录了 IsOpen=true 时必须还原为打开状态");
+    }
+
+    /// <summary>
+    /// F-P1-2 验证：旧版（v1）备份里只有 IsPinned 字段时，导入应回落为「列表置顶」，
+    /// 不得触发 Note.IsPinned 兼容 setter 把桌面置顶也一起打开；未记录 IsOpen 时保持既有行为（不还原窗口）。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P1_2_Import_LegacyBackupWithoutV2Fields_FallsBackSafely()
+    {
+        var legacyJson = """
+            {
+              "App": "StickyNotes",
+              "Version": "1.0",
+              "TotalCount": 1,
+              "Notes": [
+                {
+                  "Id": "11111111-1111-1111-1111-111111111111",
+                  "Content": "旧版备份便签",
+                  "Color": "Blue",
+                  "IsPinned": true,
+                  "IsDeleted": false,
+                  "WindowX": 200,
+                  "WindowY": 220,
+                  "WindowWidth": 380,
+                  "WindowHeight": 420
+                }
+              ]
+            }
+            """;
+        var legacyFile = Path.Combine(_testDir, "legacy.json");
+        await File.WriteAllTextAsync(legacyFile, legacyJson);
+
+        var dbContext = new SqliteDatabaseContext(Path.Combine(_testDir, "legacy.db"));
+        await dbContext.InitializeAndMigrateAsync();
+        var repo = new NoteRepository(dbContext);
+
+        Assert.AreEqual(1, await new ExportImportService(repo).ImportNotesAsync(legacyFile));
+
+        var note = (await repo.GetAllAsync()).Single();
+        Assert.AreEqual("旧版备份便签", note.Content);
+        Assert.IsTrue(note.IsPinnedInList, "旧备份的 IsPinned 应回落为列表置顶");
+        Assert.IsFalse(note.AlwaysOnTop, "旧备份不得被兼容 setter 顺带打开桌面置顶");
+        Assert.IsFalse(note.IsOpen, "旧备份未记录 IsOpen，应保持既有行为（不自动还原窗口）");
+    }
+
+    /// <summary>
+    /// F-P1-2 验证：导入完成后必须以「全量重载」方式刷新主列表 —— 不得再借用
+    /// NoteCreatedMessage + new Note() 的老写法（Note.Id 恒非 Guid.Empty，会凭空插入一张
+    /// 空白且未持久化的幽灵便签）。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_2_Import_TriggersFullReload_InsteadOfPhantomNote()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new ReloadTrackingRepository(new Note
+            {
+                Id = Guid.NewGuid(),
+                Content = "导入后应出现在列表里的便签",
+                Color = NoteColor.Green
+            });
+            var wm = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
+
+            using var vm = new NotesListViewModel(repo, new SearchService(), wm);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+            var loadsAfterInit = repo.GetAllActiveCallCount;
+
+            // 用户执行「导入 JSON 备份」→ 服务层导入完成后发出重载请求
+            WeakReferenceMessenger.Default.Send(new NotesReloadedRequestedMessage());
+            PumpDispatcher(200);
+
+            Assert.IsTrue(
+                repo.GetAllActiveCallCount > loadsAfterInit,
+                "收到 NotesReloadedRequestedMessage 后必须重新拉取全量便签");
+
+            // 关键：列表中不得出现任何 Id == Guid.Empty 的幽灵卡片
+            Assert.AreEqual(1, vm.Notes.Count, "导入后列表条目数应与数据库一致，不得凭空多出幽灵便签");
+            Assert.IsFalse(vm.Notes.Any(n => n.Id == Guid.Empty), "不得插入未持久化的空白幽灵便签");
+        });
+    }
+
+    private static void PumpDispatcher(int delayMilliseconds)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < delayMilliseconds)
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background,
+                (Action)(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            Thread.Sleep(15);
+        }
+    }
+
+    /// <summary>
+    /// 记录 GetAllActiveAsync 调用次数，用于验证「导入 → 全量重载」链路真实发生。
+    /// </summary>
+    private sealed class ReloadTrackingRepository : INoteRepository
+    {
+        private readonly List<Note> _notes;
+        public int GetAllActiveCallCount { get; private set; }
+
+        public ReloadTrackingRepository(params Note[] notes) => _notes = notes.ToList();
+
+        public Task<IReadOnlyList<Note>> GetAllActiveAsync(CancellationToken ct = default)
+        {
+            GetAllActiveCallCount++;
+            return Task.FromResult<IReadOnlyList<Note>>(_notes.Where(n => !n.IsDeleted).ToList());
+        }
+
+        public Task<IReadOnlyList<Note>> GetAllArchivedAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(_notes.Where(n => n.IsDeleted).ToList());
+
+        public Task<IReadOnlyList<Note>> GetAllAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(_notes.ToList());
+
+        public Task<Note?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(_notes.FirstOrDefault(n => n.Id == id));
+
+        public Task SaveAsync(Note note, CancellationToken ct = default)
+        {
+            var idx = _notes.FindIndex(n => n.Id == note.Id);
+            if (idx >= 0) _notes[idx] = note;
+            else _notes.Add(note);
+            return Task.CompletedTask;
+        }
+
+        public Task SaveBatchAsync(IEnumerable<Note> notes, CancellationToken ct = default) =>
+            Task.WhenAll(notes.Select(n => SaveAsync(n, ct)));
+
+        public Task SoftDeleteAsync(Guid id, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task ArchiveNoteAsync(Guid id, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task RestoreNoteAsync(Guid id, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task HardDeleteAsync(Guid id, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task ClearAllArchivedAsync(CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task UpdateWindowBoundsAsync(Guid id, double x, double y, double width, double height, bool isOpen, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task UpdateWindowPlacementAsync(Guid id, double x, double y, double width, double height, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 }

@@ -275,8 +275,9 @@ public partial class SettingsViewModel : ObservableObject
                     MessageBoxImage.Information
                 );
 
-                // 通知主管理窗口重新拉取全量便签
-                WeakReferenceMessenger.Default.Send(new NoteCreatedMessage(new Models.Note()));
+                // 通知主管理窗口全量重载（导入可能新增/更新任意条数，不能逐条插卡片）。
+                // 禁止改回 NoteCreatedMessage + new Note()：那条路径会生成一张幽灵便签。原 F-P1-2 子问题 2。
+                WeakReferenceMessenger.Default.Send(new NotesReloadedRequestedMessage());
             }
             catch (Exception ex)
             {
