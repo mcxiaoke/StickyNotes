@@ -250,9 +250,24 @@ public partial class NoteViewModel : ObservableObject
 
         try
         {
-            _autoSaveCoordinator.FlushAsync(Note.Id).ConfigureAwait(false).GetAwaiter().GetResult();
-            _repository.SaveAsync(Note).ConfigureAwait(false).GetAwaiter().GetResult();
+            var executed = _autoSaveCoordinator.FlushAsync(Note.Id).ConfigureAwait(false).GetAwaiter().GetResult();
 
+            if (executed)
+            {
+                // 待保存调度已执行完整保存：状态、时间戳与列表广播均由 SaveAction 内部完成。
+                // 原实现在此之后又无条件 SaveAsync(Note) 一次，造成关窗时的重复全量写（F-P2-11）。
+                return;
+            }
+
+            if (SaveState == NoteSaveState.Saved)
+            {
+                // 无待保存且状态已是已同步：内容早已落库，零写入
+                return;
+            }
+
+            // 兜底直写：覆盖「防抖任务在途已被摘除」与「上次保存失败后重试」两种情形，
+            // 保住 F-P1-4「关窗必同步落库」的契约
+            _repository.SaveAsync(Note).ConfigureAwait(false).GetAwaiter().GetResult();
             LastSavedAt = DateTime.Now;
             SaveState = NoteSaveState.Saved;
 
@@ -281,7 +296,23 @@ public partial class NoteViewModel : ObservableObject
 
         try
         {
-            await _autoSaveCoordinator.FlushAsync(Note.Id);
+            var executed = await _autoSaveCoordinator.FlushAsync(Note.Id);
+
+            if (executed)
+            {
+                // 待保存调度已执行完整保存：状态、时间戳与列表广播均由 SaveAction 内部完成。
+                // 原实现在此之后又无条件 SaveAsync(Note) 一次，造成每次失焦都双写一条
+                // 全量 UPDATE（F-P2-11 的写放大），现只写一次。
+                return;
+            }
+
+            if (SaveState == NoteSaveState.Saved)
+            {
+                // 无待保存且状态已是已同步：内容早已落库，零写入
+                return;
+            }
+
+            // 兜底直写：覆盖「防抖任务在途已被摘除」与「上次保存失败后重试」两种情形
             await _repository.SaveAsync(Note);
             LastSavedAt = DateTime.Now;
             SaveState = NoteSaveState.Saved;
