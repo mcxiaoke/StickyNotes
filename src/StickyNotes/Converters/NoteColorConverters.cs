@@ -67,7 +67,7 @@ public sealed class NoteColorToBackgroundBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -82,7 +82,7 @@ public sealed class NoteColorToToolbarBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -97,7 +97,7 @@ public sealed class NoteColorToTextBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -112,7 +112,7 @@ public sealed class NoteColorToBorderBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -127,7 +127,7 @@ public sealed class NoteColorToAccentBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -142,7 +142,7 @@ public sealed class NoteColorToSecondaryTextBrushConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -163,7 +163,7 @@ public sealed class NoteColorEqualsConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }
 
 /// <summary>
@@ -181,5 +181,5 @@ public sealed class InverseBooleanToVisibilityConverter : IValueConverter
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+        Binding.DoNothing;
 }

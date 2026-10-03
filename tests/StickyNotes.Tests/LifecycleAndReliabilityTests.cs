@@ -60,6 +60,7 @@ public class LifecycleAndReliabilityTests
             var services = new ServiceCollection();
             services.AddSingleton<INoteRepository>(_repository);
             services.AddSingleton(new AutoSaveCoordinator(_repository));
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             var sp = services.BuildServiceProvider();
 
@@ -145,6 +146,7 @@ public class LifecycleAndReliabilityTests
             var services = new ServiceCollection();
             services.AddSingleton<INoteRepository>(_repository);
             services.AddSingleton(new AutoSaveCoordinator(_repository));
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             var sp = services.BuildServiceProvider();
 
@@ -178,6 +180,7 @@ public class LifecycleAndReliabilityTests
             var services = new ServiceCollection();
             services.AddSingleton<INoteRepository>(_repository);
             services.AddSingleton(new AutoSaveCoordinator(_repository));
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             var sp = services.BuildServiceProvider();
             var wm = new WindowManager(sp, _repository);
@@ -424,6 +427,7 @@ public class LifecycleAndReliabilityTests
             var services = new ServiceCollection();
             services.AddSingleton<INoteRepository>(_repository);
             services.AddSingleton(new AutoSaveCoordinator(_repository));
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             var sp = services.BuildServiceProvider();
             var wm = new WindowManager(sp, _repository);

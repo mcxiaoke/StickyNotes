@@ -205,4 +205,26 @@ public class SettingsAndBackupTests
         Assert.AreEqual(16.0, recovered.Settings.EditorFontSize, 0.001,
             "主文件损坏时应从 .bak 恢复用户设置，而非静默回退默认值");
     }
+
+    [TestMethod]
+    public void F_P2_24_ExpiredLogFiles_AreIdentifiedForCleanup()
+    {
+        var now = new DateTime(2026, 10, 3, 12, 0, 0);
+
+        // 超过保留期（31 天前）→ 应被清理
+        Assert.IsTrue(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-20260901.log"), now),
+            "31 天前的日志应判定为过期");
+
+        // 保留期内（29 天前）→ 不应清理
+        Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-20260904.log"), now),
+            "保留期内的日志不得删除");
+
+        // 当天日志 → 不应清理
+        Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-20261003.log"), now));
+
+        // 命名不符合约定（含用户可能手工放入的文件）→ 一律不动，避免激进删除
+        Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "notes_backup.db"), now));
+        Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-notadate.log"), now));
+        Assert.IsFalse(AppLog.IsExpiredLogFile(Path.Combine(_testDir, "app-20260901.log.bak"), now));
+    }
 }

@@ -131,6 +131,7 @@ public class ConcurrencyAndDecouplingTests
             services.AddSingleton<ISearchService, SearchService>();
             services.AddSingleton<AutoSaveCoordinator>();
             services.AddSingleton<WindowManager>();
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             services.AddSingleton<NotesListViewModel>();
             var sp = services.BuildServiceProvider();
@@ -198,6 +199,7 @@ public class ConcurrencyAndDecouplingTests
             services.AddSingleton<ISearchService, SearchService>();
             services.AddSingleton<AutoSaveCoordinator>();
             services.AddSingleton<WindowManager>();
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             services.AddSingleton<NotesListViewModel>();
             var sp = services.BuildServiceProvider();
@@ -290,6 +292,7 @@ public class ConcurrencyAndDecouplingTests
             services.AddSingleton<ISearchService, SearchService>();
             services.AddSingleton<AutoSaveCoordinator>();
             services.AddSingleton<WindowManager>();
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
             services.AddTransient<NoteViewModel>();
             services.AddSingleton<NotesListViewModel>();
             var sp = services.BuildServiceProvider();

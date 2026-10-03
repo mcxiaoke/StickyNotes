@@ -41,8 +41,10 @@ public sealed class WindowManager
             return existingWindow;
         }
 
-        var vm = _serviceProvider?.GetService<NoteViewModel>() 
-            ?? new NoteViewModel(_repository, _serviceProvider?.GetService<AutoSaveCoordinator>() ?? new AutoSaveCoordinator(_repository), _serviceProvider?.GetService<SettingsService>());
+        // NoteViewModel 已注册为 Transient，必须经容器解析；
+        // 原先的 `?? new NoteViewModel(...)` 兜底永不执行，却会在 DI 失败时静默造出
+        // 不受容器管理、无人 Dispose 的实例（原 F-P2-12）。
+        var vm = _serviceProvider.GetRequiredService<NoteViewModel>();
         vm.Initialize(note);
 
         var window = new NoteWindow(vm);

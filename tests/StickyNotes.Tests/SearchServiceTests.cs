@@ -187,7 +187,7 @@ public class SearchServiceTests
             var note2 = new Note { Id = Guid.NewGuid(), Content = "World Banana" };
             var repo = new FakeSearchRepo(new[] { note1, note2 });
             var search = new SearchService();
-            var wm = new WindowManager(null!, repo);
+            var wm = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
 
             using var vm = new NotesListViewModel(repo, search, wm);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
@@ -218,7 +218,7 @@ public class SearchServiceTests
             var note1 = new Note { Id = Guid.NewGuid(), Content = "Hello Apple Pie" };
             var repo = new FakeSearchRepo(new[] { note1 });
             var search = new SearchService();
-            var wm = new WindowManager(null!, repo);
+            var wm = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
 
             using var vm = new NotesListViewModel(repo, search, wm);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
@@ -246,7 +246,7 @@ public class SearchServiceTests
     {
         var repo = new FakeSearchRepo(Array.Empty<Note>());
         var search = new SearchService();
-        var wm = new WindowManager(null!, repo);
+        var wm = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
 
         var vm = new NotesListViewModel(repo, search, wm);
         vm.SearchText = "Apple";
