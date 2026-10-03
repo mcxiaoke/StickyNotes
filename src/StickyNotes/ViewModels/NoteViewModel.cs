@@ -233,6 +233,39 @@ public partial class NoteViewModel : ObservableObject
     }
 
     /// <summary>
+    /// 同步阻塞式刷盘（专供窗口 Closing 使用）。
+    /// WPF 的窗口关闭是同步流程，async void 事件处理器中 await 之后的续体在
+    /// 「全部窗口 Closed → App.OnExit → 进程结束」的时序下不会执行，因此此处必须同步等待落库完成。
+    /// 复用 AutoSaveCoordinator 中已验证不会死锁的 ConfigureAwait(false).GetAwaiter().GetResult() 模式。
+    /// </summary>
+    public void FlushSaveBlocking()
+    {
+        if (Note.IsDeleted) return;
+
+        try
+        {
+            _autoSaveCoordinator.FlushAsync(Note.Id).ConfigureAwait(false).GetAwaiter().GetResult();
+            _repository.SaveAsync(Note).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            LastSavedAt = DateTime.Now;
+            SaveState = NoteSaveState.Saved;
+
+            // 与异步版本保持一致：广播持久化正文（禁止用 PreviewText，见下方说明）
+            WeakReferenceMessenger.Default.Send(new NoteContentChangedMessage(Note.Id, Note.Content, Note.UpdatedAt));
+        }
+        catch (Exception ex)
+        {
+            SaveState = NoteSaveState.Failed;
+            AppLog.Error($"[NoteViewModel] 便签 {Note.Id} 关闭时同步刷盘失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 是否存在尚未落盘的改动（供窗口失焦时短路，避免每次失焦都全量写库）
+    /// </summary>
+    public bool HasPendingChanges => SaveState != NoteSaveState.Saved;
+
+    /// <summary>
     /// 立即强制刷盘当前便签
     /// </summary>
     public async Task FlushSaveAsync()

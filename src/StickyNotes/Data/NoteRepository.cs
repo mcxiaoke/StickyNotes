@@ -300,6 +300,39 @@ public sealed class NoteRepository : INoteRepository
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// 仅更新便签的窗口坐标与尺寸，不触碰 IsOpen（用于「仅桌面置顶便签记忆坐标」的单一职责写入口）。
+    /// 与 UpdateWindowBoundsAsync 分离，避免坐标写入顺带改变打开状态。
+    /// </summary>
+    public async Task UpdateWindowPlacementAsync(
+        Guid id,
+        double x,
+        double y,
+        double width,
+        double height,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE Notes
+            SET
+                WindowX = $x,
+                WindowY = $y,
+                WindowWidth = $width,
+                WindowHeight = $height
+            WHERE Id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", id.ToString());
+        command.Parameters.AddWithValue("$x", x);
+        command.Parameters.AddWithValue("$y", y);
+        command.Parameters.AddWithValue("$width", width);
+        command.Parameters.AddWithValue("$height", height);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static void BindNoteParameters(SqliteCommand command, Note note)
     {
         command.Parameters.AddWithValue("$id", note.Id.ToString());

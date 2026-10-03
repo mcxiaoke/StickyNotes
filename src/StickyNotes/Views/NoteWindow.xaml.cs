@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.Messaging;
+using StickyNotes.Infrastructure;
 using StickyNotes.Messages;
 using StickyNotes.Models;
 using StickyNotes.ViewModels;
@@ -46,12 +47,25 @@ public partial class NoteWindow : Window
         // 监听窗口失焦与关闭事件，立即触发无延迟强制刷盘保存
         Deactivated += async (_, _) =>
         {
+            // 无待保存改动时短路，避免「在便签与列表间来回切换 = 每切一次一条全量 UPDATE」（原 F-P2-10）
+            if (!ViewModel.HasPendingChanges) return;
             await ViewModel.FlushSaveAsync();
         };
 
-        Closing += async (_, _) =>
+        // 关闭必须是同步阻塞刷盘：此前的 async void 写法中，await 之后的续体在
+        // 「全部窗口 Closed → App.OnExit → 进程结束」这一真实时序下根本不会执行，
+        // 导致最后 500ms 输入不落库、也不广播到主列表（原 F-P1-4）。
+        // 复用 AutoSaveCoordinator 中已验证不会死锁的 ConfigureAwait(false).GetAwaiter().GetResult() 模式。
+        Closing += (_, _) =>
         {
-            await ViewModel.FlushSaveAsync();
+            try
+            {
+                ViewModel.FlushSaveBlocking();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[NoteWindow] 关闭时同步刷盘失败: {ex.Message}", ex);
+            }
         };
     }
 

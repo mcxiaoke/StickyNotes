@@ -17,11 +17,25 @@ namespace StickyNotes;
 public partial class App : Application
 {
     private IServiceProvider? _serviceProvider;
+    private bool _hasPerformedShutdown;
 
     /// <summary>
     /// 全局应用是否正在关闭中（用于隔离普通窗口关闭与应用退出）
     /// </summary>
     public static bool IsShuttingDown { get; private set; }
+
+    /// <summary>
+    /// 在**发起退出之前**置位关闭标志（托盘「退出便签」、系统注销/关机等所有主动退出路径都必须先调用）。
+    /// 这是 F-P0-1 的关键：WPF 的真实事件顺序是「全部窗口 Closed → App.OnExit」，
+    /// 若等到 OnExit 才置位，窗口关闭回调会误判为「用户主动关闭」而把 IsOpen 写成 false，
+    /// 导致下次启动一张贴纸都不出现。因此必须在 Shutdown() 之前先声明退出意图。
+    /// </summary>
+    public static void BeginShutdown()
+    {
+        if (IsShuttingDown) return;
+        IsShuttingDown = true;
+        AppLog.Info("[App] 已进入退出流程，窗口关闭回调将不再回写 IsOpen=false");
+    }
 
     public static IServiceProvider Services => ((App)Current)._serviceProvider!;
 
@@ -120,23 +134,31 @@ public partial class App : Application
     private void OnSessionEnding(object? sender, SessionEndingEventArgs e)
     {
         AppLog.Info($"[App] 收到操作系统注销/关机通知 ({e.Reason})，立即同步落盘");
+        // 关机不经过 Shutdown()，此处必须直接完成「先存坐标、再标记退出」的原子动作
+        _serviceProvider?.GetService<WindowManager>()?.BeginShutdownAndPersistPinnedPlacement();
         PerformSafeShutdown();
     }
 
     /// <summary>
-    /// 执行应用退出前的统一安全持久化（坐标记忆 + 脏数据刷盘）
+    /// 执行应用退出前的统一安全持久化（坐标记忆 + 脏数据刷盘）。
+    /// 主路径已在 TrayIconService 中于 Shutdown() 之前调用（那时窗口字典仍完整）；
+    /// 此处的调用是对 SessionEnding、异常退出等场景的兜底，用 _hasPerformedShutdown 保证幂等。
     /// </summary>
     private void PerformSafeShutdown()
     {
-        if (IsShuttingDown) return;
-        IsShuttingDown = true;
+        if (_hasPerformedShutdown) return;
+
+        _hasPerformedShutdown = true;
 
         try
         {
-            // 1. 同步持久化当前桌面上所有打开贴纸的精确坐标与尺寸，保持 IsOpen = true
-            _serviceProvider?.GetService<WindowManager>()?.PersistActiveWindowsBoundsOnExit();
+            // 1. 仅持久化「桌面置顶」便签的精确坐标与尺寸（不写 IsOpen，避免依赖退出事件顺序）
+            _serviceProvider?.GetService<WindowManager>()?.PersistPinnedWindowsPlacementOnExit();
 
-            // 2. 将所有待写脏数据直接写入 SQLite，绝不走 UI 消息总线，防止死锁
+            // 2. 声明退出：确保随后窗口关闭回调不回写 IsOpen=false（幂等）
+            BeginShutdown();
+
+            // 3. 将所有待写脏数据直接写入 SQLite，绝不走 UI 消息总线，防止死锁
             _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
 
             AppLog.Info("[App] 退出前安全落盘完成");
