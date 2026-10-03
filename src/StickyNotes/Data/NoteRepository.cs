@@ -378,17 +378,10 @@ public sealed class NoteRepository : INoteRepository
             UpdatedAt = DateTime.Parse(reader.GetString(11), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
         };
 
-        if (reader.FieldCount >= 14)
-        {
-            note.IsPinnedInList = reader.GetInt32(12) == 1;
-            note.AlwaysOnTop = reader.GetInt32(13) == 1;
-        }
-        else
-        {
-            bool isPinned = reader.GetInt32(3) == 1;
-            note.IsPinnedInList = isPinned;
-            note.AlwaysOnTop = isPinned;
-        }
+        // 四个查询均显式列出 IsPinnedInList/AlwaysOnTop（含由迁移补齐的旧库），
+        // 因此此处直接读取第 13/14 列；原 `FieldCount >= 14` 分支恒为真，已删除。
+        note.IsPinnedInList = reader.GetInt32(12) == 1;
+        note.AlwaysOnTop = reader.GetInt32(13) == 1;
 
         return note;
     }

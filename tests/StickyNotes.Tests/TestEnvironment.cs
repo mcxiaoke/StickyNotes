@@ -3,8 +3,12 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using StickyNotes.Data;
 using StickyNotes.Infrastructure;
+using StickyNotes.Services;
+using StickyNotes.ViewModels;
 
 namespace StickyNotes.Tests;
 
@@ -43,6 +47,29 @@ public class TestEnvironment
         }
         catch { }
     }
+
+    /// <summary>
+    /// 为测试装配一个与生产 <c>App.ConfigureServices</c> 等价的最小 DI 容器
+    /// （含 <see cref="NoteViewModel"/> 所需的 <see cref="SettingsService"/>）。
+    /// <see cref="WindowManager"/> 不再容忍 <c>null</c> 容器：它必须经容器解析 NoteViewModel。
+    /// </summary>
+    public static IServiceProvider CreateWindowManagerContainer(INoteRepository repository)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(repository);
+        services.AddSingleton(TestEnvironment.CreateSettingsService());
+        services.AddSingleton(new AutoSaveCoordinator(repository));
+        services.AddSingleton<WindowManager>();
+        services.AddTransient<NoteViewModel>();
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// 创建一个隔离在本次测试临时目录内的 <see cref="SettingsService"/>。
+    /// 便签 ViewModel 现要求显式注入设置服务（不再容忍绕过 DI 的隐式 fallback）。
+    /// </summary>
+    public static SettingsService CreateSettingsService() =>
+        new(Path.Combine(TempRoot, $"settings-{Guid.NewGuid():N}.json"));
 
     /// <summary>
     /// 确保存在一个不会自动关停的 Application 实例，并载入主题资源

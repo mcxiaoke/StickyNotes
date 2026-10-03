@@ -23,7 +23,6 @@ public sealed partial class Note : ObservableObject
             {
                 OnPropertyChanged(nameof(DisplayTitle));
                 OnPropertyChanged(nameof(PreviewText));
-                OnPropertyChanged(nameof(Snippet));
             }
         }
     }
@@ -129,41 +128,4 @@ public sealed partial class Note : ObservableObject
         }
     }
 
-    /// <summary>
-    /// 动态提取正文摘要（第 2~4 行内容）
-    /// </summary>
-    public string Snippet
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(Content))
-                return string.Empty;
-
-            using var reader = new StringReader(Content);
-            bool skippedTitle = false;
-            var snippetLines = new List<string>(3);
-
-            string? line;
-            while ((line = reader.ReadLine()) != null)
-            {
-                var trimmed = line.Trim();
-                if (!skippedTitle)
-                {
-                    if (trimmed.Length > 0)
-                    {
-                        skippedTitle = true;
-                    }
-                    continue;
-                }
-
-                if (trimmed.Length > 0)
-                {
-                    snippetLines.Add(trimmed);
-                    if (snippetLines.Count >= 3) break;
-                }
-            }
-
-            return snippetLines.Count > 0 ? string.Join("  ", snippetLines) : string.Empty;
-        }
-    }
 }

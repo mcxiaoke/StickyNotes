@@ -224,7 +224,7 @@ public class FeaturesAndPerformanceTests
             hotKeyService.Dispose();
 
             var repo = new FakeNoteRepository();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var trayService = new TrayIconService(windowManager, settingsService);
             trayService.Initialize();
             trayService.Dispose();
@@ -241,7 +241,7 @@ public class FeaturesAndPerformanceTests
         {
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator();
-            var vm = new NoteViewModel(repo, coordinator);
+            var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
             var note = new Note { Id = Guid.NewGuid(), Content = "测试便签", Color = NoteColor.Yellow };
             vm.Initialize(note);
 
@@ -283,7 +283,7 @@ public class FeaturesAndPerformanceTests
         };
         await repo.SaveAsync(note);
 
-        var vm = new NoteViewModel(repo, coordinator);
+        var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
         vm.Initialize(note);
 
         // 1. 用户在便签菜单点击归档
@@ -317,7 +317,7 @@ public class FeaturesAndPerformanceTests
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator(repo);
             var search = new SearchService();
-            var wm = new WindowManager(null!, repo);
+            var wm = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var listVm = new NotesListViewModel(repo, search, wm);
             var listWin = new Views.NotesListWindow(listVm);
 

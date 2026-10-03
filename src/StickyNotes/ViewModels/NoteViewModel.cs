@@ -102,11 +102,11 @@ public partial class NoteViewModel : ObservableObject
     public NoteViewModel(
         INoteRepository repository,
         AutoSaveCoordinator autoSaveCoordinator,
-        SettingsService? settingsService = null)
+        SettingsService settingsService)
     {
         _repository = repository;
         _autoSaveCoordinator = autoSaveCoordinator;
-        _settingsService = settingsService ?? new SettingsService();
+        _settingsService = settingsService;
 
         _fontSize = _settingsService.EditorFontSize;
 

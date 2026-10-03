@@ -171,6 +171,7 @@
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"
                                              IsChecked="{Binding StartMinimized, Mode=TwoWay}"
+                                             IsEnabled="{Binding IsStartMinimizedEnabled}"
                                              VerticalAlignment="Center" />
                         </Grid>
                     </StackPanel>

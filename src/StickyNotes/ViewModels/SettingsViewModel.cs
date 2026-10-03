@@ -110,9 +110,17 @@ public partial class SettingsViewModel : ObservableObject
             {
                 _autoStartService.SetAutoStart(value);
                 OnPropertyChanged();
+                // 「开机启动时最小化到托盘」依赖于开机自启，状态变化必须通知其可操作性
+                OnPropertyChanged(nameof(IsStartMinimizedEnabled));
             }
         }
     }
+
+    /// <summary>
+    /// 「开机启动时最小化到托盘」是否可操作。开机自启关闭时该项无意义，
+    /// 若仍可切换会让用户看到自相矛盾的状态组合。
+    /// </summary>
+    public bool IsStartMinimizedEnabled => IsAutoStartEnabled;
 
     /// <summary>PIN 锁定是否生效</summary>
     public bool IsPinEnabled => _pinService?.IsPinEnabled ?? false;

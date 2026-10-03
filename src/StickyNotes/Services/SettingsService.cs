@@ -135,9 +135,12 @@ public sealed class SettingsService
         }
     }
 
-    public SettingsService(string? customSettingsPath = null)
+    /// <summary>
+    /// 以指定配置文件路径构造（测试入口）；为空时使用 <see cref="AppPaths.SettingsPath"/>。
+    /// </summary>
+    public SettingsService(string? settingsPath = null)
     {
-        _settingsPath = customSettingsPath ?? AppPaths.SettingsPath;
+        _settingsPath = settingsPath ?? AppPaths.SettingsPath;
         Settings = LoadSettings(_settingsPath);
     }
 
@@ -153,11 +156,11 @@ public sealed class SettingsService
         }
     }
 
-    public void SaveSettings(string? customSettingsPath = null)
+    public void SaveSettings()
     {
         try
         {
-            var targetPath = customSettingsPath ?? _settingsPath;
+            var targetPath = _settingsPath;
             var json = JsonSerializer.Serialize(Settings, JsonOptions);
 
             // 原子写入：先写临时文件并落盘，再用 File.Replace 整体替换目标文件。

@@ -37,8 +37,6 @@ public partial class App : Application
         AppLog.Info("[App] 已进入退出流程，窗口关闭回调将不再回写 IsOpen=false");
     }
 
-    public static IServiceProvider Services => ((App)Current)._serviceProvider!;
-
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
