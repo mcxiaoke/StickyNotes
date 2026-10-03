@@ -847,13 +847,77 @@ public class LifecycleAndReliabilityTests
     }
 
     /// <summary>
-    /// F-P1-8 验证：菜单关闭后需要 WM_CANCELMODE 复位图标状态、NIM_SETFOCUS 归还焦点。
+    /// 回归（用户实际反馈）：点托盘菜单项后，任务栏「展开图标」被白框框住并提示
+    /// 「显示隐藏的图标」。原因是菜单关闭时调用了 <c>NIM_SETFOCUS</c>，
+    /// 它把**整个任务栏**（Shell_TrayWnd）变成前台窗口，Windows 随之给通知区域
+    /// 获得焦点的图标绘制焦点框并弹出提示。
+    /// 因此托盘代码中**不得**调用 NIM_SETFOCUS；也不得为其重新引入菜单 Closed 订阅。
+    /// 本用例通过源码扫描锁定该约束（防止再次"顺带"加回来）。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_TrayIcon_DoesNotStealFocusFromShell()
+    {
+        var sourcePath = FindRepositoryFile(
+            Path.Combine("src", "StickyNotes", "Services", "TrayIconService.cs"));
+
+        var text = File.ReadAllText(sourcePath);
+
+        // 只检查有效代码：注释里为说明原因会提到 NIM_SETFOCUS，不应算作调用
+        var codeLines = text
+            .Split('\n')
+            .Select(line =>
+            {
+                var trimmed = line.TrimStart();
+                var commentIndex = line.IndexOf("//", StringComparison.Ordinal);
+                return trimmed.StartsWith("//", StringComparison.Ordinal) || commentIndex < 0
+                    ? (trimmed.StartsWith("//", StringComparison.Ordinal) ? string.Empty : line)
+                    : line[..commentIndex];
+            });
+
+        var effectiveCode = string.Join('\n', codeLines);
+
+        Assert.IsFalse(
+            effectiveCode.Contains("NIM_SETFOCUS", StringComparison.Ordinal),
+            "TrayIconService 不得调用 NIM_SETFOCUS：它会把焦点交给整个任务栏，"
+            + "导致通知区域图标出现焦点白框与「显示隐藏的图标」提示");
+
+        // 正确的收尾必须保留：WM_CANCELMODE 告知 Shell 菜单模式已结束（缺失会导致
+        // Shell 接管通知区域焦点），WM_NULL 干净交还前台身份。
+        Assert.IsTrue(
+            effectiveCode.Contains("WM_CANCELMODE", StringComparison.Ordinal),
+            "菜单关闭后必须发 WM_CANCELMODE，否则 Shell 认为菜单仍激活并接管通知区域焦点");
+
+        Assert.IsTrue(
+            effectiveCode.Contains("WM_NULL", StringComparison.Ordinal),
+            "菜单关闭后必须发 WM_NULL 交还前台身份（经典托盘菜单收尾）");
+    }
+
+    /// <summary>
+    /// F-P1-8 验证：右键菜单关闭仅需 WM_CANCELMODE 复位图标状态，
+    /// 用于消除「图标偶发保持按下灰态」。
     /// </summary>
     [TestMethod]
     public void F_P1_8_ContextMenuClose_PostsCancelMode()
     {
         Assert.AreEqual(0x001F, NativeMethods.WM_CANCELMODE, "WM_CANCELMODE 常量必须为 0x001F");
-        Assert.AreEqual(0x00000003, NativeMethods.NIM_SETFOCUS,
-            "菜单关闭后应调用 NIM_SETFOCUS 把焦点还给通知区域");
+    }
+
+    /// <summary>
+    /// 由测试程序集位置向上回溯定位仓库内的源码文件（与截图测试相同的目录布局约定）。
+    /// </summary>
+    private static string FindRepositoryFile(string relativePath)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"未能在仓库中找到源文件: {relativePath}");
     }
 }

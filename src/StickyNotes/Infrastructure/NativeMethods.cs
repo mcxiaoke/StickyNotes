@@ -210,6 +210,12 @@ internal static class NativeMethods
     /// <summary>菜单关闭后需要主动复位托盘图标状态，否则偶发保持"按下"灰态</summary>
     public const int WM_CANCELMODE = 0x001F;
 
+    /// <summary>
+    /// 无操作消息。用于托盘菜单关闭后把前台身份干净地交还给系统
+    /// （经典托盘菜单收尾写法），避免 Shell 继续停留在菜单模式。
+    /// </summary>
+    public const int WM_NULL = 0x0000;
+
     /// <summary>把焦点还给任务栏通知区域（菜单关闭/按 ESC 取消后应调用）</summary>
     public const int NIM_SETFOCUS = 0x00000003;
 
