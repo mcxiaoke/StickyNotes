@@ -474,6 +474,136 @@ public class LifecycleAndReliabilityTests
     }
 
     /// <summary>
+    /// 回归：NOTIFYICON_VERSION_4 下事件码位于 LOWORD(lParam)、图标 ID 位于 HIWORD(lParam)。
+    /// 早期版本把 lParam 整体当事件码比较（0x03E90400 vs 0x0400/0x007B），
+    /// 所有分支都不命中 → 托盘图标在但左右键、双击全部无反应。
+    /// 本用例用「带非零图标 ID 的真实 lParam」锁定：
+    ///   1. 未做位段解析时必然无法命中（防止退回 lParam 整体比较）；
+    ///   2. v4 语义下左键/键盘激活 = NIN_SELECT/NIN_KEYSELECT，右键 = WM_CONTEXTMENU。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_TrayEventCode_MustBeDecodedFromLowWord()
+    {
+        const int trayIconId = 1001; // 与 TrayIconService.TrayIconId 一致
+
+        // Shell 在 v4 下实际投递的 lParam：LOWORD = 事件码，HIWORD = 图标 ID
+        int selectLParam = (trayIconId << 16) | NativeMethods.NIN_SELECT;
+        int keySelectLParam = (trayIconId << 16) | NativeMethods.NIN_KEYSELECT;
+        int contextMenuLParam = (trayIconId << 16) | NativeMethods.WM_CONTEXTMENU;
+
+        // 先证明"不解析位段就会全盘不命中"——这是原缺陷的机理
+        Assert.AreNotEqual(NativeMethods.NIN_SELECT, selectLParam,
+            "整体 lParam 不可能等于裸事件码（这正是原缺陷：拿 lParam 直接比较）");
+        Assert.AreNotEqual(NativeMethods.WM_CONTEXTMENU, contextMenuLParam,
+            "整体 lParam 不可能等于裸事件码");
+
+        // 再锁定正确解析结果
+        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
+            NativeMethods.ClassifyTrayEvent(selectLParam),
+            "v4 下左键单击（NIN_SELECT）必须被识别为「唤醒列表」");
+        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
+            NativeMethods.ClassifyTrayEvent(keySelectLParam),
+            "v4 下键盘激活（NIN_KEYSELECT）必须被识别为「唤醒列表」");
+        Assert.AreEqual(NativeMethods.TrayEventKind.ShowContextMenu,
+            NativeMethods.ClassifyTrayEvent(contextMenuLParam),
+            "v4 下右键必须被识别为「弹出菜单」（文档：鼠标右键与键盘菜单键都发 WM_CONTEXTMENU）");
+
+        // 兼容旧版 / 鼠标消息直传的路径
+        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
+            NativeMethods.ClassifyTrayEvent(NativeMethods.WM_LBUTTONUP));
+        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
+            NativeMethods.ClassifyTrayEvent(NativeMethods.WM_LBUTTONDBLCLK));
+        Assert.AreEqual(NativeMethods.TrayEventKind.ShowContextMenu,
+            NativeMethods.ClassifyTrayEvent(NativeMethods.WM_RBUTTONUP));
+
+        // 与托盘无关的消息必须被忽略（例如 WM_MOUSEMOVE 悬停、0）
+        Assert.AreEqual(NativeMethods.TrayEventKind.None, NativeMethods.ClassifyTrayEvent(0));
+        Assert.AreEqual(NativeMethods.TrayEventKind.None,
+            NativeMethods.ClassifyTrayEvent((trayIconId << 16) | 0x0200), "WM_MOUSEMOVE 不应触发任何动作");
+    }
+
+    /// <summary>
+    /// 回归：NOTIFYICON_VERSION_4 会抑制标准 tooltip，必须额外声明 NIF_SHOWTIP，
+    /// 否则托盘图标不再显示提示文字（用户在"旧式"版本里本来能看到）。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_TrayIconFlags_KeepStandardTooltipUnderV4()
+    {
+        Assert.IsTrue(
+            (NativeMethods.TrayNotifyIconFlags & NativeMethods.NIF_SHOWTIP) != 0,
+            "v4 下必须声明 NIF_SHOWTIP，否则标准托盘提示被抑制、用户看不到提示文字");
+
+        foreach (var required in new[]
+                 {
+                     NativeMethods.NIF_MESSAGE, NativeMethods.NIF_ICON, NativeMethods.NIF_TIP
+                 })
+        {
+            Assert.IsTrue((NativeMethods.TrayNotifyIconFlags & required) != 0,
+                $"托盘 uFlags 必须仍包含必要标志 0x{required:X}（回调消息/图标/提示）");
+        }
+    }
+
+    /// <summary>
+    /// 回归：唤醒已运行实例必须投递**全部**本进程顶层窗口，不得命中第一个就停止枚举。
+    /// EnumWindows 按 z 序返回，第一个本进程窗口常常是只处理托盘消息的隐藏 helper 窗口；
+    /// 若提前 return，唤醒消息会被丢弃，表现为「已有实例在运行，但再双击 exe 毫无反应」。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_NotifyExistingInstance_PostsToAllOwnWindows_NotJustFirst()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            TestEnvironment.EnsureApplication();
+
+            // 建两个本进程顶层窗口，模拟「调度器窗口 + 托盘隐藏窗口 + 主窗口并存」
+            var first = new System.Windows.Interop.HwndSource(
+                new System.Windows.Interop.HwndSourceParameters("StickyNotes_Notify_A")
+                {
+                    WindowStyle = 0,
+                    Width = 0,
+                    Height = 0
+                });
+            var second = new System.Windows.Interop.HwndSource(
+                new System.Windows.Interop.HwndSourceParameters("StickyNotes_Notify_B")
+                {
+                    WindowStyle = 0,
+                    Width = 0,
+                    Height = 0
+                });
+
+            try
+            {
+                int secondHits = 0;
+                System.Windows.Interop.HwndSourceHook hook = (IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+                {
+                    if (msg == NativeMethods.WM_ACTIVATE_INSTANCE)
+                    {
+                        secondHits++;
+                        handled = true;
+                    }
+                    return IntPtr.Zero;
+                };
+                second.AddHook(hook);
+
+                int posted = NativeMethods.PostActivateToOwnProcessWindows();
+
+                Assert.IsTrue(posted >= 2,
+                    $"必须向本进程的每个顶层窗口都投递（实际 {posted} 个），"
+                    + "否则唤醒消息可能落在隐藏 helper 窗口上被丢弃");
+                Assert.AreNotEqual(IntPtr.Zero, first.Handle);
+                Assert.AreNotEqual(IntPtr.Zero, second.Handle);
+
+                second.RemoveHook(hook);
+            }
+            finally
+            {
+                first.Dispose();
+                second.Dispose();
+            }
+        });
+    }
+
+    /// <summary>
     /// F-P1-8 验证：必须监听 explorer.exe 在任务栏重建后广播的 TaskbarCreated 注册消息，
     /// 否则用户重启/刷新 explorer 后托盘图标永久消失，只能重启应用。
     /// </summary>
@@ -491,13 +621,120 @@ public class LifecycleAndReliabilityTests
     }
 
     /// <summary>
-    /// F-P1-8 验证：右键菜单关闭后必须主动发 WM_CANCELMODE 复位托盘图标，
-    /// 否则图标偶发保持"按下"灰态。
+    /// 回归：唤醒消息必须由常驻窗口兜底处理 —— 主列表窗口在 --minimized/--autostart 启动路径下
+    /// 不会被 Show()，因此没有 HWND，挂在它上面的 WndProc 永远收不到消息。
+    /// 本用例模拟「托盘隐藏窗口已存在而主列表窗口尚未创建」的真实状态：
+    /// 断言托盘隐藏窗口能收到唤醒消息、且其处理器会真正把主列表窗口创建并显示出来。
     /// </summary>
     [TestMethod]
-    public void F_P1_8_ContextMenuClose_PostsCancelMode()
+    public void F_P1_8_ActivateMessage_HandledByTrayWindow_WhenMainWindowNotCreated()
     {
-        Assert.AreEqual(0x001F, NativeMethods.WM_CANCELMODE, "WM_CANCELMODE 常量必须为 0x001F");
+        TestEnvironment.RunInSta(() =>
+        {
+            TestEnvironment.EnsureApplication();
+
+            var repo = new TrackingRepository(
+                new Note { Id = Guid.NewGuid(), Content = "待唤醒主列表后可见", IsOpen = true });
+
+            // 按生产 DI 组合装配：NotesListWindow 必须可由容器解析（App.ConfigureServices 中已注册）
+            var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+            services.AddSingleton<INoteRepository>(repo);
+            services.AddSingleton(TestEnvironment.CreateSettingsService());
+            services.AddSingleton(new AutoSaveCoordinator(repo));
+            services.AddSingleton<WindowManager>();
+            services.AddSingleton<ISearchService, SearchService>();
+            services.AddSingleton<NotesListViewModel>();
+            services.AddSingleton<Views.NotesListWindow>();
+            var provider = services.BuildServiceProvider();
+
+            var windowManager = provider.GetRequiredService<WindowManager>();
+
+            // 取本容器内的主列表窗口单例（不显示它）。
+            // 不用 Application.Current.Windows 判定：其它 UI 用例可能已留下列表窗口，
+            // 会造成测试间污染并使前置条件失真。
+            var listWindow = provider.GetRequiredService<Views.NotesListWindow>();
+
+            // 前置条件：该窗口尚未显示 → 没有 HWND（消息若只挂在它上面必然收不到）
+            Assert.IsFalse(listWindow.IsLoaded, "前置条件：主列表窗口尚未显示，因此没有 HWND");
+
+            var tray = new TrayIconService(windowManager, TestEnvironment.CreateSettingsService());
+            tray.Initialize(); // 创建并安装托盘隐藏窗口的 HwndHook（等价于 StickyNotes_TrayHelper）
+
+            // 用户双击 exe → Program.Main 向本进程全部顶层窗口投递唤醒消息
+            var posted = NativeMethods.PostActivateToOwnProcessWindows();
+            Assert.IsTrue(posted >= 1, "至少应投递到托盘隐藏窗口");
+
+            // 泵消息 + 让 BeginInvoke 的激活动作执行
+            PumpDispatcherFrames(600);
+
+            Assert.IsTrue(
+                listWindow.IsLoaded,
+                "托盘隐藏窗口必须兜底处理唤醒消息并唤起主列表"
+                + "（原缺陷：该消息只挂主列表窗口，而主窗口未 Show 时没有 HWND，导致双击 exe 毫无反应）");
+            Assert.IsTrue(listWindow.IsVisible, "被唤起的主列表窗口应可见");
+
+            listWindow.Close();
+            tray.Dispose();
+        });
+    }
+
+    private static void PumpDispatcherFrames(int milliseconds)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < milliseconds)
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background,
+                (Action)(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            Thread.Sleep(15);
+        }
+    }
+
+    /// <summary>
+    /// 仅记录查询内容的仓储替身，供「主窗口未创建时能否被唤起」用例使用。
+    /// </summary>
+    private sealed class TrackingRepository : INoteRepository
+    {
+        private readonly List<Note> _notes;
+
+        public TrackingRepository(params Note[] notes) => _notes = notes.ToList();
+
+        public Task<IReadOnlyList<Note>> GetAllActiveAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(_notes.Where(n => !n.IsDeleted).ToList());
+
+        public Task<IReadOnlyList<Note>> GetAllArchivedAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(_notes.Where(n => n.IsDeleted).ToList());
+
+        public Task<IReadOnlyList<Note>> GetAllAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(_notes.ToList());
+
+        public Task<Note?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(_notes.FirstOrDefault(n => n.Id == id));
+
+        public Task SaveAsync(Note note, CancellationToken ct = default)
+        {
+            var idx = _notes.FindIndex(n => n.Id == note.Id);
+            if (idx >= 0) _notes[idx] = note;
+            else _notes.Add(note);
+            return Task.CompletedTask;
+        }
+
+        public Task SaveBatchAsync(IEnumerable<Note> notes, CancellationToken ct = default) =>
+            Task.WhenAll(notes.Select(n => SaveAsync(n, ct)));
+
+        public Task SoftDeleteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ArchiveNoteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RestoreNoteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task HardDeleteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ClearAllArchivedAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task UpdateWindowBoundsAsync(Guid id, double x, double y, double width, double height, bool isOpen, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task UpdateWindowPlacementAsync(Guid id, double x, double y, double width, double height, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     /// <summary>
@@ -560,5 +797,63 @@ public class LifecycleAndReliabilityTests
 
             source.RemoveHook(hook);
         });
+    }
+
+    /// <summary>
+    /// 回归：唤醒消息的**调用方是第二实例**，它自身没有任何窗口。
+    /// 因此匹配目标窗口时绝不能按 `Environment.ProcessId`（那会命中零个窗口、唤醒静默失效，
+    /// 用户看到"双击没反应"），必须按应用标识（同可执行文件名）匹配。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_SameApplicationMatching_FindsWindowsOfAnotherProcess()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            TestEnvironment.EnsureApplication();
+
+            var source = new System.Windows.Interop.HwndSource(
+                new System.Windows.Interop.HwndSourceParameters("StickyNotes_AppMatch")
+                {
+                    WindowStyle = 0,
+                    Width = 0,
+                    Height = 0
+                });
+
+            try
+            {
+                var currentName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+
+                Assert.IsTrue(
+                    NativeMethods.IsSameApplicationWindow(source.Handle, currentName),
+                    "同一可执行文件的窗口必须被判定为同一应用（第二实例据此唤醒第一实例）");
+
+                // 名称比较规则（纯函数）：大小写不敏感、空名一律不匹配
+                Assert.IsTrue(NativeMethods.IsSameProcessName("StickyNotes", "stickynotes"),
+                    "进程名比较必须忽略大小写");
+                Assert.IsFalse(NativeMethods.IsSameProcessName("explorer", "StickyNotes"),
+                    "不同可执行文件的窗口不得被误投唤醒消息");
+                Assert.IsFalse(NativeMethods.IsSameProcessName(null, "StickyNotes"));
+                Assert.IsFalse(NativeMethods.IsSameProcessName("StickyNotes", ""));
+
+                Assert.IsFalse(
+                    NativeMethods.IsSameApplicationWindow(IntPtr.Zero, currentName),
+                    "无效窗口句柄必须安全返回 false，不得抛异常中断枚举");
+            }
+            finally
+            {
+                source.Dispose();
+            }
+        });
+    }
+
+    /// <summary>
+    /// F-P1-8 验证：菜单关闭后需要 WM_CANCELMODE 复位图标状态、NIM_SETFOCUS 归还焦点。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_8_ContextMenuClose_PostsCancelMode()
+    {
+        Assert.AreEqual(0x001F, NativeMethods.WM_CANCELMODE, "WM_CANCELMODE 常量必须为 0x001F");
+        Assert.AreEqual(0x00000003, NativeMethods.NIM_SETFOCUS,
+            "菜单关闭后应调用 NIM_SETFOCUS 把焦点还给通知区域");
     }
 }
