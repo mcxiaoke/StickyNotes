@@ -7,6 +7,15 @@
 > **基线复验**：`dotnet build -c Release` → **0 错误 0 警告**；`dotnet test` → **71/71 通过**（11s，SDK 10.0.400）；4 组新增探针实证（用后已清理，`git status` 干净）
 > **修复状态（2026-10-03 更新）**：本报告 **2 个 P0 与 6 个 P1 已完成修复并通过回归验证**；**6 个 P1 部分完成**；**1 项建议经实测证伪已撤销**；其余 P2/P3 未修。修复详情见 `docs/CHANGES-20261003.md`，代码提交 `67471c0` → `237e0c8`（6 批）。**完整状态见文末《修复状态总览》**。
 >
+> **追加修复（2026-10-03 晚间，提交 `f65c12b` → 本批次，共 5 批）**：按"低风险 × 高收益"原则继续处理 §11.5 的未修项 ——
+> ① **F-P1-1 子项 1**：PIN 锁定态 `Ctrl+N`/`Ctrl+F` 绕过（**已修**，新增回归用例）；
+> ② 工程化：`.editorconfig`、`TreatWarningsAsErrors`、构建可复现（`Version` 去时间戳）、`global.json`、`README.md`、`.gitattributes`；
+> ③ 日志 30 天保留期清理、设置项依赖联动、只读转换器 `ConvertBack`、DI 隐式实例、死代码清理、`LiveRegion`；
+> ④ 交互与体验：`SelectAll` 吞输入、搜索卡片"按下即跳转"、右键先选中、搜索摘要二次截断、默认尺寸四源归一、第二实例退出码；
+> ⑤ 文档回写：`APP-ARCHITECTURE.md` 与 `APP-PRODUCT.md` 的漂移点已逐条更正并加"历史设计文档"警示。
+> **未做**：GitHub Actions/CI（用户明确排除）、`Directory.Packages.props`、Costura 单 exe 真机验证。
+> **结论更正 1 项**：F-P3-19 建议的"字号按便签记忆"与设置页"全局字号、即时生效"的产品契约冲突，**改为保留既有行为 + 注释固化 + 回归测试**（详见变更记录批次 C）。详见文末 §11.7。
+>
 > **一句话结论（原始基线结论，已被上方修复状态部分取代）**：**架构与代码组织水平显著高于同类个人桌面项目，但存在 2 个必须立即修复的 P0 缺陷——「正常退出后桌面布局全丢」与「空白便签正文被占位文案污染并可落库」，二者均已端到端复现。修复这 2 项后，本项目即可从「能演示」跨入「可交付」；其余 30 余项为质量、性能与体验改进项，不阻塞交付。**
 
 ---
@@ -929,6 +938,53 @@ R2 把「`settings.json` 非原子写导致 PIN 静默失效」列为 P2-1、「
 
 - **日志（批次 6，`237e0c8`）**：补齐数据层（`NoteRepository` 原 0 处）、迁移、导入导出、搜索（≥100ms 才 Warn）、PIN 流程、新建/归档、窗口位置、进程入口共 13 个文件；`AppPaths`/`NativeMethods` 因 **`AppLog` 会经 `AppPaths.LogsDirectory` 回环**而改用 `Debug.WriteLine`。
 - **测试**：71 → **78** 项，新增 7 项 —— `F_P1_12_SaveState_ReflectsRealPersistenceOutcome`、`F_P1_6_*` ×3、`F_P1_5_*` ×2、`F_P1_4_Closing_FlushesSynchronously_BeforeReturning`；并**重写** `P0_1_*` 两项（原用例顺序与真实相反，是 F-P0-1 漏检的直接原因）。
+
+---
+
+## 12. 追加修复总览（2026-10-03 晚间，低风险 × 高收益专项）
+
+> 依据本文 §11.5「未修复（本轮范围外）」清单，按「改动小、行为风险低、收益明显」筛选后分 5 批提交。
+> 详细要点见 `docs/CHANGES-20261003.md` 顶部四条记录（批次 A~D）与本节。
+
+### 12.1 已完成
+
+| 编号 | 项 | 说明 |
+|:--|:---|:---|
+| **F-P1-1**（子项 1） | PIN 锁定态 `Ctrl+N`/`Ctrl+F` 绕过 | 窗口级按键分发首行加锁定守卫；新增用例覆盖"锁定态不得新建窗口/不得触发搜索" |
+| F-P2-16 / F-P2-12 | 绕过 DI 的隐式实例 | `NoteViewModel` 的 `SettingsService` 改必填；`WindowManager` 改 `GetRequiredService<NoteViewModel>()` |
+| F-P2-24 | 日志无保留期清理 | 30 天保留期 + 纯函数 `IsExpiredLogFile`（非约定命名一律不删） |
+| F-P3-1 / F-P3-3 / F-P3-2 | 死代码 | 删 `App.Services`、`FieldCount>=14` 永假分支、`Note.Snippet` |
+| F-P3-5 | 只读转换器 `ConvertBack` 抛异常 | 9 处改 `Binding.DoNothing` |
+| F-P3-9 | 默认尺寸/落点四源不一致 | 实体新增几何常量；SQL 默认对齐 `380×420`；`WindowManager` 去魔法数；新增单源一致性用例 |
+| F-P3-10 / F-P3-11 | 语义瑕疵 | `SaveSettings` 去掉无意义形参；第二实例显式退出码 |
+| F-P3-13 | 设置项依赖未联动 | 「最小化到托盘」随「开机自启」禁用 |
+| F-P3-15 | 搜索卡片按下即跳转 | 改「抬起 + 4px 移动阈值」，摘要可选中复制 |
+| F-P3-17 | `SelectAll()` 吞输入 | 7 处改 `CaretIndex` 置末尾，新增用例 |
+| F-P3-18 | 右键不先选中 | 新增 `MouseRightButtonDown` 同步选中 |
+| F-P3-20 | 搜索摘要二次截断 | 阈值抽常量 + 卡片样式去 `TextTrimming`，新增用例 |
+| F-P1-11（残留） | 命中数不播报 | 加 `AutomationProperties.LiveSetting="Polite"` |
+| §6.1 工程化 | 无 `.editorconfig` / 无 `TreatWarningsAsErrors` / 构建不可复现 / 无 `global.json` / 无 `README` / 无 `.gitattributes` | 全部补齐（**CI 除外**，按用户决定不加） |
+| §6.2 文档漂移 | 12 条 | `APP-ARCHITECTURE.md` / `APP-PRODUCT.md` 逐条更正，并在文首加「历史设计文档」警示 |
+
+### 12.2 结论更正（1 项）
+
+| 编号 | 原建议 | 本次结论 |
+|:--|:---|:---|
+| **F-P3-19** | 字号改为「按便签记忆 + 250ms 防抖落盘」 | **不采纳**：与产品契约冲突 —— 设置页提供"便签正文字号"下拉项并明确"即时生效"，字号被设计为**全局**设置；改为按便签记忆会使设置页失效，并需推翻 `FontSizeChangedMessage` 的全局广播语义。**处理**：保留既有行为，把契约写入代码注释并以回归测试固化。「每滚一格写盘」的代价属实，如需优化应在**保持全局语义**前提下加防抖。 |
+
+### 12.3 仍未做（明确记录）
+
+- **GitHub Actions / CI**：用户明确排除。
+- `Directory.Packages.props`（中央包版本管理）：当前 2 工程 / 10 个包引用，收益有限。
+- **Costura 单 exe 在干净机器缺原生 `e_sqlite3.dll`**：需人工在干净虚拟机验证 `publish.ps1` 产物。
+- **P2 剩余**：F-P2-3（Shared Cache + WAL）、F-P2-6（备份只跑一次）、F-P2-7（导入 N+1）、F-P2-8（搜索规则两份实现）、F-P2-9（全字段覆盖 UPSERT）、F-P2-11（`FlushSaveAsync` 双写）、F-P2-13（UI 线程阻塞）、F-P2-14 ~ F-P2-20、F-P2-22（Trigger 换 `Effect` 强制软件渲染）、F-P2-23、F-P2-25（搜索余量）、F-P2-26（截图像素断言）、F-P2-27（测试基建）。
+  - 其中 **F-P2-11 经复核确认仍然存在**；**F-P2-22 是 R1 时代遗留、至今未执行**的性能项（列表滚动 + hover 时 CPU 飙升），属"中等收益中等风险"，建议下一轮优先。
+- **P3 剩余**：F-P3-2 的其余死符号、F-P3-4（`IsPinned` 双实现陷阱）、F-P3-6 ~ F-P3-8、F-P3-19（见 §12.2 更正）、F-P3-20 的其余细节（搜索跨行兜底 `CharIndex=0`、归档 `MessageBox` 未设 `Owner`、`RuntimeInfo` 硬编码 ".NET 8.0"、置顶筛选空状态提示）。
+- **F-P1 剩余**：F-P1-1 子项 2（命令层兜底）、F-P1-2（导入丢三态 + 幽灵便签）、F-P1-7（CTS `Dispose` 竞态）、F-P1-8（托盘四宗毛病）、F-P1-10 的虚拟化/键盘导航、F-P1-11 的 Tab 移焦与焦点视觉。
+
+### 12.4 验证
+
+`dotnet build -c Release` → **0 错误 0 警告**（`Version=1.1.2` 可复现）；`dotnet test` → **83/83 通过**（本轮 78 → 83，新增 5 项）。
 
 ---
 

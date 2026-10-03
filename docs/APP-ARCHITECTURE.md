@@ -4,6 +4,17 @@
 > **面向平台**：Windows 10 / Windows 11 (x64)  
 > **工程定位**：高可靠、极简、高性能、可无缝扩展的 Windows 桌面便签系统架构。
 
+> ⚠️ **请先读这一段：本文档是「历史设计文档」，部分内容已落后于实现**
+>
+> 本文档记录的是项目初期的设计推导，**代码是唯一事实来源**。已知且已核实的漂移点包括：
+> 搜索返回值语义（伪代码为"返回全部命中"，实现是**每张便签只返回首个命中**）、
+> 测试框架（本文写 `xUnit`，实际是 **MSTest**）、部分文件不存在或未列出、
+> 依赖数量（本文写 3 个，实际 **6 个**）、Schema 版本与列定义、默认窗口尺寸、
+> 解决方案文件名（实际是 `StickyNotes.slnx`）等。
+>
+> 完整的漂移清单与逐条对照见 `docs/APP-REVIEW-FINAL-20261003.md` §6.2；
+> 与代码同步的现状说明见根目录 `README.md`。
+
 ---
 
 ## 1. 架构总览与核心设计原则
@@ -77,15 +88,16 @@ graph TD
     subgraph VM_Layer [ViewModel 业务表现层 (CommunityToolkit.Mvvm)]
         MVM[NotesListViewModel]
         NVM[NoteViewModel]
-        SVM[SearchHitViewModel]
+        SVM[SettingsViewModel / ArchivedNotesViewModel]
         MS[WeakReferenceMessenger 弱引用总线]
     end
 
     subgraph Service_Layer [Service 领域服务层]
-        NS[NoteService 便签管理服务]
         SS[SearchService 搜索与坐标计算服务]
         AS[AutoSaveCoordinator 自动保存协调器]
         WM[WindowManager 窗口实例管理器]
+        PS[PinService / SettingsService / ExportImportService]
+        TS[TrayIconService / HotKeyService / AutoStartService]
     end
 
     subgraph Data_Layer [Data & Infrastructure 数据与基础设施层]
@@ -99,21 +111,23 @@ graph TD
     NW --> NVM
     NB -.-> NW
 
-    MVM --> NS
     MVM --> SS
     MVM --> WM
-    NVM --> NS
+    NVM --> SS
     NVM --> AS
+    MVM --> PS
+    NVM --> PS
 
     MVM <--> MS
     NVM <--> MS
 
-    NS --> NR
     SS --> NR
     AS --> NR
+    PS --> NR
     NR --> DB
     BK --> AP
     DB --> AP
+    TS --> AP
 ```
 
 ### 3.1 职责边界划分（硬性隔离规范）
@@ -148,6 +162,15 @@ public sealed record SearchHit(
 ```
 
 ### 4.2 搜索匹配与坐标解算算法 (`SearchService`)
+
+> ⚠️ **下面的伪代码与当前实现语义不同，请以代码为准。**
+> 真实实现是：
+> 1. **每张便签只返回首个命中**（`SearchService.cs` 命中后即 `break`），而不是"循环遍历所有命中位置"；
+> 2. `SearchHit` 除 `CharIndex/Length` 外还携带 `Segments` / `Lines` / `TotalMatches` 三个字段，用于渲染"前一行 + 命中行 + 后一行"的三行上下文与行内高亮，`TotalMatches` 单独统计全文命中处数；
+> 3. 行号计算不是逐字符数换行，而是**单次预扫描**构建 `lineStartOffsets` 后二分，把复杂度从 O(n²) 降为 O(n)；
+> 4. 支持**多关键词**（空格分隔）与"跨行紧凑匹配"兜底。
+>
+> 保留下方伪代码仅用于说明"字符绝对偏移锚点"的设计意图。
 
 ```csharp
 namespace StickyNotes.Services;
@@ -290,7 +313,7 @@ public partial class NoteWindow : Window
          VerticalScrollBarVisibility="Auto"
          HorizontalScrollBarVisibility="Disabled"
          IsInactiveSelectionHighlightEnabled="True"
-         SelectionBrush="#0078D7"
+         SelectionBrush="#3399FF"
          FontSize="14"
          FontFamily="Segoe UI, Microsoft YaHei"
          BorderThickness="0"
@@ -317,24 +340,27 @@ public partial class NoteWindow : Window
 不需要笨重的 EF Core Migration，由底层的 `SqliteDatabaseContext` 自动执行增量迁移：
 
 ```sql
--- Schema Version 1 (MVP)
+-- Schema Version 1 (MVP) —— 注意：与当前实现一致，V1 只建 v1 时期的列。
+-- IsPinnedInList / AlwaysOnTop 属 V2，必须由 V2 迁移用 ALTER 补齐
+-- （若 V1 建表就带上，V2 的 ALTER 必报 duplicate column name，原 F-P1-5）。
 CREATE TABLE IF NOT EXISTS Notes (
     Id           TEXT PRIMARY KEY,
     Content      TEXT NOT NULL DEFAULT '',
-    Color        TEXT NOT NULL DEFAULT 'Yellow',
+    Color        INTEGER NOT NULL DEFAULT 0,
     IsPinned     INTEGER NOT NULL DEFAULT 0,
     IsDeleted    INTEGER NOT NULL DEFAULT 0,
-    WindowX      REAL NOT NULL DEFAULT 100,
-    WindowY      REAL NOT NULL DEFAULT 100,
-    WindowWidth  REAL NOT NULL DEFAULT 320,
-    WindowHeight REAL NOT NULL DEFAULT 360,
+    WindowX      REAL NOT NULL DEFAULT 150,
+    WindowY      REAL NOT NULL DEFAULT 150,
+    WindowWidth  REAL NOT NULL DEFAULT 380,
+    WindowHeight REAL NOT NULL DEFAULT 420,
     IsOpen       INTEGER NOT NULL DEFAULT 1,
     CreatedAt    TEXT NOT NULL,
     UpdatedAt    TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS IX_Notes_UpdatedAt ON Notes(UpdatedAt DESC);
 CREATE INDEX IF NOT EXISTS IX_Notes_IsDeleted ON Notes(IsDeleted);
+CREATE INDEX IF NOT EXISTS IX_Notes_UpdatedAt ON Notes(UpdatedAt DESC);
+CREATE INDEX IF NOT EXISTS IX_Notes_IsPinned ON Notes(IsPinned DESC);
 ```
 
 #### 迁移控制实现：
@@ -384,13 +410,13 @@ public sealed class SqliteDatabaseContext
                 CREATE TABLE IF NOT EXISTS Notes (
                     Id           TEXT PRIMARY KEY,
                     Content      TEXT NOT NULL DEFAULT '',
-                    Color        TEXT NOT NULL DEFAULT 'Yellow',
+                    Color        INTEGER NOT NULL DEFAULT 0,
                     IsPinned     INTEGER NOT NULL DEFAULT 0,
                     IsDeleted    INTEGER NOT NULL DEFAULT 0,
-                    WindowX      REAL NOT NULL DEFAULT 100,
-                    WindowY      REAL NOT NULL DEFAULT 100,
-                    WindowWidth  REAL NOT NULL DEFAULT 320,
-                    WindowHeight REAL NOT NULL DEFAULT 360,
+                    WindowX      REAL NOT NULL DEFAULT 150,
+                    WindowY      REAL NOT NULL DEFAULT 150,
+                    WindowWidth  REAL NOT NULL DEFAULT 380,
+                    WindowHeight REAL NOT NULL DEFAULT 420,
                     IsOpen       INTEGER NOT NULL DEFAULT 1,
                     CreatedAt    TEXT NOT NULL,
                     UpdatedAt    TEXT NOT NULL
@@ -511,43 +537,76 @@ protected override void OnStartup(StartupEventArgs e)
 
 ```text
 c:\Home\Projects\StickyNotes\
-├── StickyNotes.sln
+├── StickyNotes.slnx                       // 解决方案（XML 格式；非 .sln）
+├── Directory.Build.props                  // 统一版本/编译元数据/质量闸门
+├── global.json                            // 固定 SDK 版本
+├── .editorconfig / .gitattributes         // 代码风格与行尾约定
+├── README.md                              // 项目入口说明（现状以代码为准）
 ├── src\
 │   └── StickyNotes\
 │       ├── StickyNotes.csproj             // 声明 net8.0-windows, UseWPF=true
-│       ├── App.xaml / App.xaml.cs         // 全局入口、单实例控制、DI配置、未捕获异常处理
+│       ├── App.xaml / App.xaml.cs         // 全局入口、单实例控制、DI 配置、未捕获异常处理
+│       ├── Program.cs                     // 进程入口：互斥量判定 + 第二实例退出码
+│       ├── app.manifest                   // PerMonitorV2 DPI 声明
 │       ├── Models\
-│       │   ├── Note.cs                    // 便签领域实体
-│       │   ├── NoteColor.cs               // 便签7色定义与高对比色映射
-│       │   └── SearchHit.cs               // 搜索命中模型
+│       │   ├── Note.cs                    // 便签领域实体（含默认几何常量）
+│       │   ├── NoteColor.cs               // 便签 7 色定义
+│       │   └── SearchHit.cs               // 搜索命中模型（含分段高亮）
 │       ├── Data\
-│       │   ├── SqliteDatabaseContext.cs   // 数据库连接初始化与 PRAGMA 迁移
+│       │   ├── SqliteDatabaseContext.cs   // 连接初始化与 PRAGMA 幂等迁移
 │       │   ├── INoteRepository.cs         // 仓储抽象接口
-│       │   └── NoteRepository.cs         // 原生 Microsoft.Data.Sqlite 高性能 CRUD
+│       │   └── NoteRepository.cs          // 原生 Microsoft.Data.Sqlite CRUD
+│       ├── Infrastructure\
+│       │   ├── AppPaths.cs                // 四级数据路径决议
+│       │   ├── AppLog.cs                  // 按日轮转 + 30 天保留期清理
+│       │   └── NativeMethods.cs           // 托盘/热键/唤醒相关 Win32 声明
+│       ├── Messages\
+│       │   └── AppMessages.cs             // 弱引用总线消息定义
 │       ├── Services\
-│       │   ├── ISearchService.cs          // 搜索计算契约
-│       │   ├── SearchService.cs           // 内存遍历与行号/字符索引算子
-│       │   ├── WindowManager.cs           // 贴纸多窗口单例生命周期管理
+│       │   ├── ISearchService.cs / SearchService.cs   // 搜索与字符偏移定位
+│       │   ├── WindowManager.cs           // 贴纸多窗口单例与退出持久化
 │       │   ├── AutoSaveCoordinator.cs     // 防抖保存与强制 Flush 调度
-│       │   └── BackupService.cs           // 每日冷备份轮转
+│       │   ├── BackupService.cs           // VACUUM INTO 冷备份与轮转
+│       │   ├── ExportImportService.cs     // JSON 导入导出与冲突裁决
+│       │   ├── SettingsService.cs         // 设置持久化（原子写 + .bak 恢复）
+│       │   ├── PinService.cs              // PIN 锁定（PBKDF2 + 恒定时间比较）
+│       │   ├── TrayIconService.cs         // 托盘图标
+│       │   ├── HotKeyService.cs           // 全局热键
+│       │   └── AutoStartService.cs        // 开机自启
+│       ├── Converters\
+│       │   ├── NoteColorConverters.cs     // 配色转换器（静态冻结笔刷表）
+│       │   └── FriendlyDateTimeConverter.cs
 │       ├── ViewModels\
 │       │   ├── NotesListViewModel.cs      // 主列表与搜索框 VM
-│       │   ├── NoteViewModel.cs           // 独立贴纸 VM
-│       │   └── SearchHitViewModel.cs      // 搜索卡片 VM
+│       │   ├── NoteViewModel.cs           // 独立贴纸 VM（含真实保存状态）
+│       │   ├── ArchivedNotesViewModel.cs  // 归档窗口 VM
+│       │   └── SettingsViewModel.cs       // 设置中心 VM
 │       ├── Views\
 │       │   ├── NotesListWindow.xaml(.cs)  // 主便签列表管理中心
 │       │   ├── NoteWindow.xaml(.cs)       // 独立彩色便签贴纸窗口
+│       │   ├── ArchivedNotesWindow.xaml(.cs)
+│       │   ├── SettingsWindow.xaml(.cs)
+│       │   ├── PinSetupDialog.xaml(.cs)
 │       │   └── Controls\
-│       │       └── ColorPickerPopup.xaml  // 颜色选择浮窗
+│       │       └── PinLockOverlay.xaml(.cs)   // PIN 遮罩
 │       └── Resources\
-│           ├── Themes\
-│           │   └── StickyColors.xaml      // 7色主题笔刷资源
-│           └── Icons.xaml                 // 矢量图标字典
-└── tests\
-    └── StickyNotes.Tests\
-        ├── StickyNotes.Tests.csproj
-        ├── SearchServiceTests.cs          // 搜索与跳行定位算法单测（中文、空值、首尾行、折行）
-        └── NoteRepositoryTests.cs         // 数据库增删改查与迁移单测
+│           ├── DesignTokens.xaml          // 设计令牌（间距/圆角/阴影/字阶）
+│           ├── StickyColors.xaml          // 7 色主题笔刷资源
+│           └── App.ico / App.manifest
+├── tests\
+│   └── StickyNotes.Tests\                 // MSTest（含真机 HiDPI 渲染截图）
+│       ├── SearchServiceTests.cs
+│       ├── NoteRepositoryTests.cs
+│       ├── LifecycleAndReliabilityTests.cs
+│       ├── ConcurrencyAndDecouplingTests.cs
+│       ├── FeaturesAndPerformanceTests.cs
+│       ├── SettingsAndBackupTests.cs
+│       ├── PinServiceTests.cs
+│       ├── PortableModeAndPathTests.cs
+│       ├── UiRenderingAndScreenshotTests.cs
+│       └── TestEnvironment.cs             // STA 调度、DI 容器、截图基建
+├── scripts\                               // 辅助脚本（真实截图抓取等）
+└── docs\                                  // 产品/架构文档、审查报告、变更记录
 ```
 
 ### 7.1 项目依赖项 (`StickyNotes.csproj`)
@@ -564,10 +623,13 @@ c:\Home\Projects\StickyNotes\
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 仅引入两款官方推荐的核心轻量库，绝不滥用依赖 -->
+    <!-- 核心轻量依赖（当前共 6 个包：4 个运行时 + 2 个构建期 Fody） -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="WPF-UI" Version="3.0.5" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
+    <PackageReference Include="Fody" Version="6.9.2" PrivateAssets="all" />
   </ItemGroup>
 </Project>
 ```
@@ -577,7 +639,11 @@ c:\Home\Projects\StickyNotes\
 ## 8. 自动化测试与质量保障体系
 
 ### 8.1 核心单测：`SearchServiceTests`（确保跳行定位万无一失）
-利用 `xUnit` 对关键搜索定位逻辑进行完备单元测试：
+利用 `MSTest` 对关键搜索定位逻辑进行完备单元测试：
+
+> 注：早期版本本文写的是 `xUnit`，实际使用的是 MSTest（`MSTest.TestFramework`）。
+> 真实用例签名形如 `[TestMethod] public void Search_ShouldReturnCorrectLineNumber_AndCharIndex()`，
+> 断言 API 为 `Assert.AreEqual(...)` / `Assert.IsTrue(...)`。下例保留 xUnit 写法仅作算法示意。
 
 ```csharp
 public class SearchServiceTests
