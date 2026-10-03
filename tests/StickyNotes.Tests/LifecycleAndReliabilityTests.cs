@@ -361,4 +361,50 @@ public class LifecycleAndReliabilityTests
         Assert.IsTrue(text.Contains(uniqueMsg), "日志文件应包含写入的消息");
         Assert.IsTrue(text.Contains("Test exception"), "日志文件应包含异常堆栈");
     }
+
+    /// <summary>
+    /// F-P1-12 验证：底部状态栏的保存状态必须与真实落盘结果一致，不得无条件显示「已同步」。
+    /// 覆盖三种状态流转：初始 Saved → 编辑后 Pending → 刷盘成功后 Saved（且 LastSavedAt 被填充）。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_12_SaveState_ReflectsRealPersistenceOutcome()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<INoteRepository>(_repository);
+            services.AddSingleton(new AutoSaveCoordinator(_repository));
+            services.AddTransient<NoteViewModel>();
+            var sp = services.BuildServiceProvider();
+            var wm = new WindowManager(sp, _repository);
+
+            var note = new Note { Id = Guid.NewGuid(), Content = "初始正文", IsOpen = true };
+            _repository.SaveAsync(note).GetAwaiter().GetResult();
+
+            var win = wm.OpenOrActivateNote(note);
+            var vm = win.ViewModel;
+
+            // 初始态：已同步
+            Assert.AreEqual(NoteSaveState.Saved, vm.SaveState, "新建便签初始应处于 Saved 状态");
+
+            // 编辑正文 → 立即转为 Pending（存在未落盘改动）
+            vm.Content = "编辑后的新正文";
+            Assert.AreEqual(NoteSaveState.Pending, vm.SaveState, "正文变更后应立即转为 Pending");
+            Assert.AreEqual("保存中…", vm.SaveStatusText, "Pending 状态下文案应为「保存中…」");
+
+            // 强制刷盘 → 回到 Saved 且记录成功时间
+            vm.FlushSaveAsync().GetAwaiter().GetResult();
+            Assert.AreEqual(NoteSaveState.Saved, vm.SaveState, "刷盘成功后应回到 Saved");
+            Assert.IsNotNull(vm.LastSavedAt, "刷盘成功后应记录 LastSavedAt");
+            Assert.IsTrue(vm.SaveStatusText.StartsWith("已同步"), "Saved 状态文案应以「已同步」开头");
+
+            // 数据库中确实是新正文（状态可信的底线）
+            var reloaded = _repository.GetByIdAsync(note.Id).GetAwaiter().GetResult();
+            Assert.IsNotNull(reloaded);
+            Assert.AreEqual("编辑后的新正文", reloaded.Content);
+
+            win.Close();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+        });
+    }
 }

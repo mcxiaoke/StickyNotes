@@ -289,12 +289,48 @@
                     <Run Text="{Binding Content.Length, Mode=OneWay}" /><Run Text=" 字符" />
                 </TextBlock>
 
-                <!-- 自动保存状态提示 -->
-                <TextBlock Style="{StaticResource Type.CaptionSubtle}"
-                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Center"
-                           Text="已同步" />
+                <!-- 真实自动保存状态：与 NoteViewModel.SaveState 严格对应（保存中 / 已同步 HH:mm:ss / 保存失败可点击重试） -->
+                <Button HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Cursor="Hand"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="4,0"
+                        Command="{Binding RetrySaveCommand}"
+                        AutomationProperties.Name="自动保存状态，保存失败时可点击重试">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <!-- 仅在失败态可点击重试，其余状态不可交互 -->
+                                <DataTrigger Binding="{Binding SaveState}" Value="Failed">
+                                    <Setter Property="IsEnabled" Value="True" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SaveState}" Value="Saved">
+                                    <Setter Property="IsEnabled" Value="False" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SaveState}" Value="Pending">
+                                    <Setter Property="IsEnabled" Value="False" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock TextWrapping="NoWrap"
+                               VerticalAlignment="Center"
+                               Text="{Binding SaveStatusText, Mode=OneWay}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Type.CaptionSubtle}">
+                                <Setter Property="Foreground" Value="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}" />
+                                <Style.Triggers>
+                                    <!-- 保存失败时必须使用危险色突出显示，避免用户误以为已落盘 -->
+                                    <DataTrigger Binding="{Binding SaveState}" Value="Failed">
+                                        <Setter Property="Foreground" Value="{StaticResource Fluent.DangerBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
             </Grid>
         </Grid>
     </Border>
