@@ -114,7 +114,10 @@ public partial class NoteWindow : Window
 
     private void MoreMenuButton_Click(object sender, RoutedEventArgs e)
     {
-        MoreMenuPopup.IsOpen = !MoreMenuPopup.IsOpen;
+        // 注意：MoreMenuPopup.StaysOpen="False"，鼠标点击按钮时 Popup 会先因失去外部点击而自动关闭，
+        // 若此处使用 IsOpen = !IsOpen 取反，会在已关闭的基础上再次打开，导致菜单只能开不能关。
+        // 因此这里只负责「打开」，关闭交给 Popup 自身的 StaysOpen 行为。
+        MoreMenuPopup.IsOpen = true;
     }
 
     private void ShowNotesList_Click(object sender, RoutedEventArgs e)

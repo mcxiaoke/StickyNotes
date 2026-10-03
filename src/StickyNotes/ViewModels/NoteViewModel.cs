@@ -139,6 +139,10 @@ public partial class NoteViewModel : ObservableObject
 
         await _autoSaveCoordinator.FlushAsync(Note.Id);
         await _repository.SaveAsync(Note);
-        WeakReferenceMessenger.Default.Send(new NoteContentChangedMessage(Note.Id, Note.PreviewText, Note.UpdatedAt));
+        // 必须广播持久化正文 Note.Content，禁止使用展示用的派生属性 Note.PreviewText：
+        // PreviewText 在空白便签时会返回「（空白便签）」占位文案，且会 Trim 掉正文首尾空格与缩进，
+        // 一旦广播出去会污染主列表内存实体（NotesListViewModel.HandleNoteContentChanged），
+        // 再经「切换置顶」等全字段 SaveAsync 覆盖写回数据库，造成正文被永久污染。
+        WeakReferenceMessenger.Default.Send(new NoteContentChangedMessage(Note.Id, Note.Content, Note.UpdatedAt));
     }
 }

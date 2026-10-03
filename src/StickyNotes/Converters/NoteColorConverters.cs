@@ -7,18 +7,63 @@ using StickyNotes.Models;
 namespace StickyNotes.Converters;
 
 /// <summary>
+/// 便签主题色 Frozen 笔刷缓存。
+/// 背景：原先每个转换器在每次 Convert 时都执行 ColorConverter.ConvertFromString + new SolidColorBrush，
+/// 既产生字符串解析开销与对象分配，又因未 Freeze 而每次返回新实例，导致 WPF 认为画刷发生变化而触发重绘
+/// （NoteWindow.xaml 单次换色即绑定 9 处）。此处改为按颜色预构建并 Freeze 的静态缓存，转换时仅做字典查表。
+/// </summary>
+internal static class ThemeBrushCache
+{
+    internal sealed record FrozenBrushes(
+        SolidColorBrush Background,
+        SolidColorBrush Toolbar,
+        SolidColorBrush Text,
+        SolidColorBrush Border,
+        SolidColorBrush Accent,
+        SolidColorBrush SecondaryText);
+
+    private static readonly Dictionary<NoteColor, FrozenBrushes> Cache = Build();
+
+    private static Dictionary<NoteColor, FrozenBrushes> Build()
+    {
+        var dict = new Dictionary<NoteColor, FrozenBrushes>();
+        foreach (var color in Enum.GetValues<NoteColor>())
+        {
+            var theme = color.GetTheme();
+            dict[color] = new FrozenBrushes(
+                CreateFrozen(theme.BackgroundHex),
+                CreateFrozen(theme.ToolbarHex),
+                CreateFrozen(theme.TextHex),
+                CreateFrozen(theme.BorderHex),
+                CreateFrozen(theme.AccentHex),
+                CreateFrozen(theme.SecondaryTextHex));
+        }
+        return dict;
+    }
+
+    private static SolidColorBrush CreateFrozen(string hex)
+    {
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>
+    /// 取指定颜色的主题笔刷；未知值回退到经典黄，保证绑定永不返回 null。
+    /// </summary>
+    internal static FrozenBrushes Get(NoteColor color) =>
+        Cache.TryGetValue(color, out var brushes) ? brushes : Cache[NoteColor.Yellow];
+}
+
+/// <summary>
 /// 将 NoteColor 枚举转换为对应背景色 Brush
 /// </summary>
 public sealed class NoteColorToBackgroundBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is NoteColor color)
-        {
-            var theme = color.GetTheme();
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme.BackgroundHex));
-        }
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFF7D1"));
+        var color = value is NoteColor c ? c : NoteColor.Yellow;
+        return ThemeBrushCache.Get(color).Background;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -32,12 +77,8 @@ public sealed class NoteColorToToolbarBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is NoteColor color)
-        {
-            var theme = color.GetTheme();
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme.ToolbarHex));
-        }
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFEE9D"));
+        var color = value is NoteColor c ? c : NoteColor.Yellow;
+        return ThemeBrushCache.Get(color).Toolbar;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -51,12 +92,8 @@ public sealed class NoteColorToTextBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is NoteColor color)
-        {
-            var theme = color.GetTheme();
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme.TextHex));
-        }
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString("#202020"));
+        var color = value is NoteColor c ? c : NoteColor.Yellow;
+        return ThemeBrushCache.Get(color).Text;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -70,12 +107,8 @@ public sealed class NoteColorToBorderBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is NoteColor color)
-        {
-            var theme = color.GetTheme();
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme.BorderHex));
-        }
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E6D77D"));
+        var color = value is NoteColor c ? c : NoteColor.Yellow;
+        return ThemeBrushCache.Get(color).Border;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -89,12 +122,8 @@ public sealed class NoteColorToAccentBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is NoteColor color)
-        {
-            var theme = color.GetTheme();
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme.AccentHex));
-        }
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E0A800"));
+        var color = value is NoteColor c ? c : NoteColor.Yellow;
+        return ThemeBrushCache.Get(color).Accent;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -108,12 +137,8 @@ public sealed class NoteColorToSecondaryTextBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is NoteColor color)
-        {
-            var theme = color.GetTheme();
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme.SecondaryTextHex));
-        }
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6C6546"));
+        var color = value is NoteColor c ? c : NoteColor.Yellow;
+        return ThemeBrushCache.Get(color).SecondaryText;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -158,4 +183,3 @@ public sealed class InverseBooleanToVisibilityConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
-
