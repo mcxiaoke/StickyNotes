@@ -28,21 +28,20 @@ public static class BackupService
                 CreateBackup(dbPath, targetBackupFile);
             }
 
-            // 轮转清理：仅保留最近 14 份备份
+            // 轮转清理：仅保留最近 14 份备份。
+            // GetFiles 的模式扩展名 ".db" 只有 2 字符，不存在 DOS 风格的 3 字符扩展名前缀匹配，
+            // 因此不会命中 ".db.tmp" 临时文件，无需再做后缀过滤。
             var di = new DirectoryInfo(backupDir);
             var backupFiles = di.GetFiles("notes_*.db")
-                .Where(f => !f.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(f => f.CreationTimeUtc)
                 .ToList();
 
             if (backupFiles.Count > 14)
             {
-                foreach (var oldFile in backupFiles.Skip(14))
-                {
                 foreach (var oldBackup in backupFiles.Skip(14))
                 {
-                    try { oldBackup.Delete(); } catch (Exception ex) { AppLog.Warn($"[BackupService] 清理过期备份 {oldBackup.Name} 失败: {ex.Message}", ex); }
-                }
+                    try { oldBackup.Delete(); }
+                    catch (Exception ex) { AppLog.Warn($"[BackupService] 清理过期备份 {oldBackup.Name} 失败: {ex.Message}", ex); }
                 }
             }
         }
