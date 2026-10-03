@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using StickyNotes.Infrastructure;
 
@@ -10,6 +10,9 @@ namespace StickyNotes;
 /// </summary>
 public static class Program
 {
+    /// <summary>退出码：本次为第二实例，已唤醒既有实例后退出（非错误）</summary>
+    public const int ExitCodeAlreadyRunning = 2;
+
     private static Mutex? _instanceMutex;
 
     [STAThread]
@@ -23,6 +26,8 @@ public static class Program
         {
             // 广播唤醒已有实例并立即退出当前进程（耗时仅数毫秒，彻底避开 WPF、XAML 解析与嵌入程序集解压）
             NativeMethods.NotifyExistingInstance();
+            // 显式退出码：调用方（脚本/父进程）可借此区分「已有实例在运行」与「启动失败」
+            Environment.ExitCode = ExitCodeAlreadyRunning;
             return;
         }
 

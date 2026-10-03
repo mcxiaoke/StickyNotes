@@ -50,7 +50,8 @@ public sealed class WindowManager
         var window = new NoteWindow(vm);
 
         // 如果坐标属于未初始化的默认值，或者与现有窗口完全重叠，计算主窗口右侧防遮挡错开坐标
-        bool isDefaultOrUnset = (note.WindowX <= 0 || (Math.Abs(note.WindowX - 150) < 1 && Math.Abs(note.WindowY - 150) < 1));
+        bool isDefaultOrUnset = note.WindowX <= 0
+            || (Math.Abs(note.WindowX - Note.DefaultWindowX) < 1 && Math.Abs(note.WindowY - Note.DefaultWindowY) < 1);
         bool isOverlapping = _activeNoteWindows.Values.Any(w => Math.Abs(w.Left - note.WindowX) < 6 && Math.Abs(w.Top - note.WindowY) < 6);
 
         if (isDefaultOrUnset || isOverlapping)

@@ -761,5 +761,49 @@ public class UiRenderingAndScreenshotTests
             dummySource.Dispose();
         });
     }
+
+    /// <summary>
+    /// F-P3-17：焦点被抢走时不得整段选中搜索词。
+    /// 原先调用 <c>SelectAll()</c>，用户在列表首项按 ↑ 返回搜索框后继续打字，
+    /// 会把整段搜索词一次性替换掉；现改为仅移动插入符到末尾。
+    /// </summary>
+    [TestMethod]
+    public void NotesListWindow_FocusReturnToSearchBox_ShouldNotSelectAllText()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var note = new Note { Id = Guid.NewGuid(), Content = "Apple Pie", Color = NoteColor.Yellow };
+            var repo = new FakeNoteRepository { Notes = { note } };
+            var vm = new NotesListViewModel(repo, new SearchService(),
+                new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo));
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => { frame.Continue = false; }));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            // 预置搜索词，并把列表选中项置于首项
+            win.SearchBoxControl.Text = "Apple";
+            win.NotesListBoxControl.SelectedIndex = 0;
+
+            var dummySource = new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero);
+            var upArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Up)
+            {
+                RoutedEvent = Keyboard.PreviewKeyDownEvent
+            };
+            win.NotesListBox_PreviewKeyDown(win.NotesListBoxControl, upArgs);
+            Assert.IsTrue(upArgs.Handled, "首项按 ↑ 应把焦点交还搜索框");
+
+            Assert.AreEqual(0, win.SearchBoxControl.SelectionLength,
+                "返回搜索框时不得整段选中搜索词（否则继续打字会整段替换）");
+            Assert.AreEqual(5, win.SearchBoxControl.CaretIndex, "插入符应停在文本末尾");
+
+            dummySource.Dispose();
+        });
+    }
 }
 

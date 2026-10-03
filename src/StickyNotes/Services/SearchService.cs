@@ -179,7 +179,7 @@ public sealed class SearchService : ISearchService
     /// </summary>
     private static string TruncateLineSafely(string line, IReadOnlyList<string> keywords)
     {
-        if (line.Length <= 85) return line;
+        if (line.Length <= MaxSnippetLineLength) return line;
 
         // 寻找行内第一个命中位置
         int earliest = -1;
@@ -207,6 +207,14 @@ public sealed class SearchService : ISearchService
         // 无命中的上下文行截取前 75 字符
         return line[..75] + "...";
     }
+
+    /// <summary>
+    /// 摘要单行最大长度。调用方（搜索卡片）已改用不裁剪的正文样式，
+    /// 因此这里的截断是摘要行长的<b>唯一</b>决定者；此前调用方叠加
+    /// <c>Type.Body</c> 的 <c>TextTrimming</c> 会把已截断的行再省略一次，
+    /// 出现非预期「…」（原 F-P3-20）。
+    /// </summary>
+    private const int MaxSnippetLineLength = 85;
 
     /// <summary>
     /// 统计关键词在全文中的非重叠总出现次数

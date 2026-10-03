@@ -339,5 +339,41 @@ public class NoteRepositoryTests
             try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
         }
     }
-}
 
+    /// <summary>
+    /// F-P3-9：默认尺寸只能有一个事实来源。实体的默认值必须与建表列默认值一致，
+    /// 否则「新建便签的默认大小」会随「走实体还是走 SQL 默认」而漂移。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P3_9_DefaultWindowGeometry_HasSingleSourceOfTruth()
+    {
+        // 1. 实体层默认值
+        var fresh = new Note();
+        Assert.AreEqual(380, fresh.WindowWidth, "实体默认宽度应为 380");
+        Assert.AreEqual(420, fresh.WindowHeight, "实体默认高度应为 420");
+
+        // 2. 数据库列默认值（不显式写 WindowWidth/WindowHeight，让 SQL 默认生效）
+        await using var conn = _context.CreateConnection();
+        await conn.OpenAsync();
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO Notes (Id, Content, Color, IsPinned, IsPinnedInList, AlwaysOnTop, IsDeleted,
+                                   WindowX, WindowY, IsOpen, CreatedAt, UpdatedAt)
+                VALUES ('22222222-2222-2222-2222-222222222222', '默认尺寸校验', 0, 0, 0, 0, 0,
+                        150, 150, 1, '2026-10-03T00:00:00Z', '2026-10-03T00:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var loaded = await _repository.GetByIdAsync(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+        Assert.IsNotNull(loaded);
+        Assert.AreEqual(Note.DefaultWindowWidth, loaded.WindowWidth,
+            "SQL 列默认宽度必须与实体默认值一致（原为 320 vs 380 的双源漂移）");
+        Assert.AreEqual(Note.DefaultWindowHeight, loaded.WindowHeight,
+            "SQL 列默认高度必须与实体默认值一致（原为 360 vs 420 的双源漂移）");
+        Assert.AreEqual(Note.DefaultWindowX, loaded.WindowX);
+        Assert.AreEqual(Note.DefaultWindowY, loaded.WindowY);
+    }
+}
