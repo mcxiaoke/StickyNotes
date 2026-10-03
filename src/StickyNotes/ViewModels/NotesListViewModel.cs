@@ -127,10 +127,37 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
         UpdateSearchSnapshot();
     }
 
+    /// <summary>
+    /// 安全取消并清理当前正在进行的搜索任务（杜绝对已释放 CTS 重复 Cancel 导致的 ObjectDisposedException）
+    /// </summary>
+    private void CancelCurrentSearch()
+    {
+        var cts = Interlocked.Exchange(ref _searchCts, null);
+        if (cts != null)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[NotesListViewModel] 取消搜索任务异常: {ex.Message}", ex);
+            }
+            finally
+            {
+                try
+                {
+                    cts.Dispose();
+                }
+                catch (ObjectDisposedException) { }
+            }
+        }
+    }
+
     partial void OnSearchTextChanged(string value)
     {
-        _searchCts?.Cancel();
-        _searchCts?.Dispose();
+        CancelCurrentSearch();
 
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -141,31 +168,55 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
         }
 
         IsSearching = true;
-        _searchCts = new CancellationTokenSource();
-        var token = _searchCts.Token;
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        var token = cts.Token;
 
-        // 300ms 防抖即输即搜，使用不可变快照消除后台线程与 UI 绑定的并发枚举竞态
+        // 80ms 极速防抖即输即显，使用不可变快照消除后台线程与 UI 绑定的并发枚举竞态
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(300, token);
-                if (!token.IsCancellationRequested)
+                await Task.Delay(80, token);
+                if (token.IsCancellationRequested) return;
+
+                var snapshot = _searchSnapshot;
+                var hits = _searchService.Search(snapshot, value);
+
+                if (token.IsCancellationRequested) return;
+
+                void UpdateUi()
                 {
-                    var snapshot = _searchSnapshot;
-                    var hits = _searchService.Search(snapshot, value);
-                    System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                    if (token.IsCancellationRequested) return;
+                    SearchResults.Clear();
+                    foreach (var hit in hits)
                     {
-                        SearchResults.Clear();
-                        foreach (var hit in hits)
-                        {
-                            SearchResults.Add(hit);
-                        }
-                        SearchHitCount = hits.Count;
-                    });
+                        SearchResults.Add(hit);
+                    }
+                    SearchHitCount = hits.Count;
+                }
+
+                var app = System.Windows.Application.Current;
+                if (app != null && app.Dispatcher != null && !app.Dispatcher.HasShutdownStarted)
+                {
+                    if (app.Dispatcher.CheckAccess())
+                    {
+                        UpdateUi();
+                    }
+                    else
+                    {
+                        app.Dispatcher.Invoke(UpdateUi);
+                    }
+                }
+                else
+                {
+                    UpdateUi();
                 }
             }
             catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
             {
             }
             catch (Exception ex)
@@ -409,7 +460,6 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         WeakReferenceMessenger.Default.UnregisterAll(this);
-        _searchCts?.Cancel();
-        _searchCts?.Dispose();
+        CancelCurrentSearch();
     }
 }
