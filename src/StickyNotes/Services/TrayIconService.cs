@@ -136,7 +136,6 @@ public sealed class TrayIconService : IDisposable
         itemExit.Click += (_, _) =>
         {
             AppLog.Info("[TrayIconService] 用户点击托盘退出菜单");
-
             // 退出顺序至关重要（F-P0-1）：先持久化置顶便签坐标 —— 此刻窗口字典仍完整；
             // 若拖到 App.OnExit 才做，Shutdown() 已先关闭全部窗口并清空字典，坐标将永久丢失。
             // 随后标记退出，使窗口 Closed 回调跳过 IsOpen=false 回写。
@@ -175,6 +174,7 @@ public sealed class TrayIconService : IDisposable
                     break;
 
                 case NativeMethods.TrayEventKind.ShowContextMenu:
+                    AppLog.Info("[TrayIconService] 托盘右键菜单弹出");
                     ShowContextMenu();
                     handled = true;
                     break;
@@ -217,20 +217,35 @@ public sealed class TrayIconService : IDisposable
 
         NativeMethods.SetForegroundWindow(_hwndSource.Handle);
 
-        // 菜单关闭后必须主动复位托盘图标状态，否则图标会偶发保持"按下"的灰色高亮态
-        // （原 F-P1-8 第三宗毛病）。
-        _contextMenu.Closed -= ContextMenu_Closed;
-        _contextMenu.Closed += ContextMenu_Closed;
-
         // 用 MousePoint：该模式由 WPF 在**屏幕 DIP 空间**内部处理定位，天然正确。
         // 禁止改用 Placement=AbsolutePoint + 消息里的 wParam 锚点坐标：
         // 那是**物理像素**，而 WPF 的 HorizontalOffset/VerticalOffset 单位是 **DIP**。
         // 在 150% 缩放下把物理值当 DIP 用会放大 1.5 倍，坐标越界后被 WPF 钳到屏幕边缘，
         // 表现为「右键菜单跑到屏幕右下角、远离托盘图标」。
+        _contextMenu.Closed -= ContextMenu_Closed;
+        _contextMenu.Closed += ContextMenu_Closed;
+
         _contextMenu.Placement = PlacementMode.MousePoint;
         _contextMenu.IsOpen = true;
     }
 
+    /// <summary>
+    /// 菜单关闭后的收尾。这三步都不能省，各有明确用途：
+    /// <list type="number">
+    ///   <item>
+    ///     <c>WM_CANCELMODE</c>：告知 Shell「菜单模式已结束」。缺了它，Shell 会认为
+    ///     仍有菜单处于激活态，转而去接管通知区域焦点 —— 表现为「点完菜单项后，
+    ///     任务栏『显示隐藏的图标』按钮被白框圈住并获得焦点」。
+    ///   </item>
+    ///   <item>
+    ///     <c>WM_NULL</c>：让托盘隐藏窗口干净地交还前台身份（经典托盘菜单收尾写法）。
+    ///   </item>
+    ///   <item>
+    ///     **禁止调用 <c>NIM_SETFOCUS</c>**：实测它会把**整个任务栏</c>（Shell_TrayWnd）
+    ///     变成前台窗口，使通知区域图标出现焦点白框与提示文字。
+    ///   </item>
+    /// </list>
+    /// </summary>
     private void ContextMenu_Closed(object? sender, RoutedEventArgs e)
     {
         var handle = _hwndSource?.Handle ?? IntPtr.Zero;
@@ -239,9 +254,8 @@ public sealed class TrayIconService : IDisposable
             return;
         }
 
-        // 复位图标状态，并向通知区域归还焦点（否则键盘用户关闭菜单后焦点会丢失）。
         NativeMethods.PostMessage(handle, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-        NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_SETFOCUS, ref _nid);
+        NativeMethods.PostMessage(handle, NativeMethods.WM_NULL, IntPtr.Zero, IntPtr.Zero);
     }
 
     public void Dispose()
