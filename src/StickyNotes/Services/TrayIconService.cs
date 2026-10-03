@@ -167,11 +167,6 @@ public sealed class TrayIconService : IDisposable
             // 早期版本曾把 lParam 整体当事件码比较，导致所有分支都不命中、托盘完全无响应。
             var kind = NativeMethods.ClassifyTrayEvent(lParam.ToInt32());
 
-            // 鼠标锚点坐标在 wParam（GET_X/Y_LPARAM）；键盘触发时为图标左上角。
-            // 不再用 ContextMenu.Placement=MousePoint：那依赖光标而非消息锚点，定位更不可靠。
-            int anchorX = NativeMethods.LowWord((int)wParam.ToInt64());
-            int anchorY = NativeMethods.HighWord((int)wParam.ToInt64());
-
             switch (kind)
             {
                 case NativeMethods.TrayEventKind.OpenList:
@@ -180,7 +175,7 @@ public sealed class TrayIconService : IDisposable
                     break;
 
                 case NativeMethods.TrayEventKind.ShowContextMenu:
-                    ShowContextMenu(anchorX, anchorY);
+                    ShowContextMenu();
                     handled = true;
                     break;
             }
@@ -216,7 +211,7 @@ public sealed class TrayIconService : IDisposable
         return IntPtr.Zero;
     }
 
-    private void ShowContextMenu(int anchorX, int anchorY)
+    private void ShowContextMenu()
     {
         if (_contextMenu == null || _hwndSource == null) return;
 
@@ -227,9 +222,12 @@ public sealed class TrayIconService : IDisposable
         _contextMenu.Closed -= ContextMenu_Closed;
         _contextMenu.Closed += ContextMenu_Closed;
 
-        _contextMenu.Placement = PlacementMode.AbsolutePoint;
-        _contextMenu.HorizontalOffset = anchorX;
-        _contextMenu.VerticalOffset = anchorY;
+        // 用 MousePoint：该模式由 WPF 在**屏幕 DIP 空间**内部处理定位，天然正确。
+        // 禁止改用 Placement=AbsolutePoint + 消息里的 wParam 锚点坐标：
+        // 那是**物理像素**，而 WPF 的 HorizontalOffset/VerticalOffset 单位是 **DIP**。
+        // 在 150% 缩放下把物理值当 DIP 用会放大 1.5 倍，坐标越界后被 WPF 钳到屏幕边缘，
+        // 表现为「右键菜单跑到屏幕右下角、远离托盘图标」。
+        _contextMenu.Placement = PlacementMode.MousePoint;
         _contextMenu.IsOpen = true;
     }
 
