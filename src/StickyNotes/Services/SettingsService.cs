@@ -47,6 +47,13 @@ public sealed class AppSettings
     public string PinHash { get; set; } = string.Empty;
 
     /// <summary>
+    /// 仅在内存中标记：加载 settings.json 时发现 PIN 数据损坏而强制失效。
+    /// 该字段不参与序列化（JsonIgnore），仅用于向用户显式告警，避免「以为受保护实则未受保护」。
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool PinDataCorrupted { get; set; }
+
+    /// <summary>
     /// 列表窗口不在前台 N 分钟后自动关闭（0 表示不启用），下次打开时重新锁定
     /// </summary>
     public int ListAutoCloseMinutes { get; set; } = 10;
@@ -152,11 +159,27 @@ public sealed class SettingsService
         {
             var targetPath = customSettingsPath ?? _settingsPath;
             var json = JsonSerializer.Serialize(Settings, JsonOptions);
-            File.WriteAllText(targetPath, json);
+
+            // 原子写入：先写临时文件并落盘，再用 File.Replace 整体替换目标文件。
+            // 直接 File.WriteAllText 覆盖时，写到一半断电/崩溃会留下半截 JSON，
+            // 而 LoadSettings 在解析失败时会静默回退默认值 —— 于是 PinSalt/PinHash 一起丢失，
+            // 用户以为仍受 PIN 保护实则已完全失效（原 F-P1-6）。
+            var tempPath = targetPath + ".tmp";
+            File.WriteAllText(tempPath, json);
+
+            if (File.Exists(targetPath))
+            {
+                // 保留上一版作为 .bak，便于 settings 损坏时人工恢复
+                File.Replace(tempPath, targetPath, targetPath + ".bak", ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(tempPath, targetPath, overwrite: true);
+            }
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"[SettingsService] 保存设置失败: {ex.Message}", ex);
+            AppLog.Error($"[SettingsService] 保存设置失败: {ex.Message}", ex);
         }
     }
 
@@ -171,15 +194,76 @@ public sealed class SettingsService
                 if (loaded != null)
                 {
                     loaded.EditorFontSize = Math.Clamp(loaded.EditorFontSize, 10.0, 36.0);
+
+                    // PIN 数据完整性校验：开关已打开但盐/哈希缺失或非合法 base64，
+                    // 说明 settings.json 曾被损坏或被人工不完整编辑。
+                    // 此时绝不能静默降级为「无 PIN」——必须显式告知用户，否则用户会在
+                    // 毫无察觉的情况下失去防护（原 F-P1-6 的核心危害）。
+                    if (loaded.PinEnabled)
+                    {
+                        if (string.IsNullOrEmpty(loaded.PinSalt) || string.IsNullOrEmpty(loaded.PinHash))
+                        {
+                            loaded.PinEnabled = false;
+                            loaded.PinDataCorrupted = true;
+                            AppLog.Error("[SettingsService] 检测到 settings.json 中 PinEnabled 为真但 PIN 盐/哈希缺失，PIN 锁定已失效并要求用户重新设置");
+                        }
+                        else if (!IsValidBase64(loaded.PinSalt) || !IsValidBase64(loaded.PinHash))
+                        {
+                            loaded.PinEnabled = false;
+                            loaded.PinDataCorrupted = true;
+                            AppLog.Error("[SettingsService] 检测到 settings.json 中 PIN 盐/哈希不是合法 base64，PIN 锁定已失效并要求用户重新设置");
+                        }
+                    }
+
                     return loaded;
                 }
             }
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"[SettingsService] 加载设置失败: {ex.Message}", ex);
+            // 解析失败不再静默：明确记录错误并尝试用 .bak 兜底恢复
+            AppLog.Error($"[SettingsService] 加载设置失败，将尝试回退备份: {ex.Message}", ex);
+
+            var recovered = TryRecoverFromBackup(path);
+            if (recovered != null)
+            {
+                AppLog.Warn("[SettingsService] 已从 settings.json.bak 成功恢复配置");
+                return recovered;
+            }
         }
 
         return new AppSettings();
+    }
+
+    /// <summary>
+    /// settings.json 解析失败时，尝试从 .bak 备份恢复（写坏的主文件不应带走用户的全部设置）
+    /// </summary>
+    private static AppSettings? TryRecoverFromBackup(string path)
+    {
+        try
+        {
+            var backupPath = path + ".bak";
+            if (!File.Exists(backupPath)) return null;
+
+            var json = File.ReadAllText(backupPath);
+            var loaded = JsonSerializer.Deserialize<AppSettings>(json);
+            if (loaded != null)
+            {
+                loaded.EditorFontSize = Math.Clamp(loaded.EditorFontSize, 10.0, 36.0);
+                return loaded;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[SettingsService] 从备份恢复设置同样失败: {ex.Message}", ex);
+        }
+
+        return null;
+    }
+
+    private static bool IsValidBase64(string value)
+    {
+        Span<byte> buffer = new byte[value.Length];
+        return Convert.TryFromBase64String(value, buffer, out _);
     }
 }

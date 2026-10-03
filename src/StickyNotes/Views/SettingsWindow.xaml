@@ -294,6 +294,13 @@
                                            Style="{StaticResource Type.CaptionSubtle}"
                                            TextWrapping="Wrap"
                                            Margin="0,3,0,0" />
+                                <!-- PIN 数据损坏告警：绝不允许「以为受保护实则未受保护」静默发生 -->
+                                <TextBlock Text="⚠ 检测到 PIN 配置数据缺失或已损坏，锁定已失效。请重新启用并设置 PIN。"
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           Foreground="{StaticResource Fluent.DangerBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0"
+                                           Visibility="{Binding IsPinDataCorrupted, Converter={StaticResource BoolToVisibilityConverter}}" />
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
