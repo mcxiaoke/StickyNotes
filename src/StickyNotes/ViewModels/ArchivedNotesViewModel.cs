@@ -33,9 +33,33 @@ public partial class ArchivedNotesViewModel : ObservableObject
             if (string.IsNullOrWhiteSpace(SearchText))
                 return ArchivedNotes;
 
+            var trimmed = SearchText.Trim();
+            var tokens = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0) return ArchivedNotes;
+            var compact = string.Concat(tokens);
+
             return ArchivedNotes.Where(n =>
-                n.Content.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                n.DisplayTitle.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+            {
+                var content = n.Content ?? string.Empty;
+                var title = n.DisplayTitle ?? string.Empty;
+
+                if (content.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                    title.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (compact.Length > 0 &&
+                    (content.Contains(compact, StringComparison.OrdinalIgnoreCase) ||
+                     title.Contains(compact, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                return tokens.All(t =>
+                    content.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                    title.Contains(t, StringComparison.OrdinalIgnoreCase));
+            });
         }
     }
 

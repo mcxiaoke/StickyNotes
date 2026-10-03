@@ -45,13 +45,20 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             await ViewModel.LoadNotesAsync();
         };
 
-        // 锁定规则：每次窗口从不可见变为可见（启动/托盘唤醒）都重新上锁
+        // 锁定规则：每次窗口从不可见变为可见（启动/托盘唤醒）都重新上锁；隐藏或收起时清空搜索词
         IsVisibleChanged += (s, e) =>
         {
             _idleCloseTimer.Stop();
-            if (e.NewValue is true && (_pinService?.IsPinEnabled ?? false))
+            if (e.NewValue is true)
             {
-                PinOverlay.IsLocked = true;
+                if (_pinService?.IsPinEnabled ?? false)
+                {
+                    PinOverlay.IsLocked = true;
+                }
+            }
+            else
+            {
+                ViewModel.SearchText = string.Empty;
             }
         };
 
@@ -81,6 +88,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         Closing += (s, e) =>
         {
             SaveWindowPlacement();
+            ViewModel.SearchText = string.Empty;
             if (!App.IsShuttingDown && (_settingsService?.MinimizeToTrayOnClose ?? true))
             {
                 e.Cancel = true;
@@ -264,11 +272,115 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     }
 
 
-    private void SearchBox_KeyDown(object sender, KeyEventArgs e)
+    internal ListBox NotesListBoxControl => NotesListBox;
+    internal ListBox SearchHitsListBoxControl => SearchHitsListBox;
+    internal Wpf.Ui.Controls.TextBox SearchBoxControl => SearchBox;
+
+    internal void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && ViewModel.SearchResults.Count > 0)
+        if (e.Key == Key.Down)
         {
-            ViewModel.JumpToSearchHitCommand.Execute(ViewModel.SearchResults[0]);
+            if (ViewModel.IsSearching)
+            {
+                if (ViewModel.SearchResults.Count > 0)
+                {
+                    FocusListBoxItem(SearchHitsListBox, 0);
+                    e.Handled = true;
+                }
+            }
+            else
+            {
+                if (ViewModel.FilteredNotes.Any())
+                {
+                    FocusListBoxItem(NotesListBox, 0);
+                    e.Handled = true;
+                }
+            }
+        }
+        else if (e.Key == Key.Enter)
+        {
+            if (ViewModel.IsSearching && ViewModel.SearchResults.Count > 0)
+            {
+                var hit = (SearchHitsListBox.SelectedItem as SearchHit) ?? ViewModel.SearchResults[0];
+                ViewModel.JumpToSearchHitCommand.Execute(hit);
+                e.Handled = true;
+            }
+            else if (!ViewModel.IsSearching && NotesListBox.SelectedItem is Note selectedNote)
+            {
+                ViewModel.OpenNoteCommand.Execute(selectedNote);
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            if (ViewModel.IsSearching)
+            {
+                ViewModel.SearchText = string.Empty;
+                e.Handled = true;
+            }
+        }
+    }
+
+    // 兼容历史调用
+    internal void SearchBox_KeyDown(object sender, KeyEventArgs e) => SearchBox_PreviewKeyDown(sender, e);
+
+    internal void FocusListBoxItem(ListBox listBox, int index)
+    {
+        if (index < 0) return;
+        listBox.SelectedIndex = index;
+        listBox.Focus();
+        if (listBox.ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem item)
+        {
+            item.Focus();
+            item.BringIntoView();
+        }
+        else
+        {
+            if (listBox.Items.Count > index)
+            {
+                listBox.ScrollIntoView(listBox.Items[index]);
+            }
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                var container = listBox.ItemContainerGenerator.ContainerFromIndex(index) as ListBoxItem;
+                container?.Focus();
+                container?.BringIntoView();
+            });
+        }
+    }
+
+    internal void SearchHitsListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Up && SearchHitsListBox.SelectedIndex <= 0)
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && SearchHitsListBox.SelectedItem is SearchHit hit)
+        {
+            ViewModel.JumpToSearchHitCommand.Execute(hit);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            ViewModel.SearchText = string.Empty;
+            SearchBox.Focus();
+            e.Handled = true;
+        }
+    }
+
+    internal void NotesListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Up && NotesListBox.SelectedIndex <= 0)
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && NotesListBox.SelectedItem is Note note)
+        {
+            ViewModel.OpenNoteCommand.Execute(note);
             e.Handled = true;
         }
     }

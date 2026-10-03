@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using StickyNotes.Data;
 using StickyNotes.Models;
@@ -196,6 +197,150 @@ public class UiRenderingAndScreenshotTests
             Assert.AreEqual(2, vm.SearchResults.Count);
 
             TestEnvironment.SaveWindowSnapshot(win, 480, 720, "02_NotesListWindow_Searching.png");
+        });
+    }
+
+    [TestMethod]
+    public void NotesListWindow_Closing_ShouldClearSearchText()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository
+            {
+                Notes =
+                {
+                    new Note { Id = Guid.NewGuid(), Content = "测试便签内容", Color = NoteColor.Blue }
+                }
+            };
+            var searchService = new SearchService();
+            var windowManager = new WindowManager(null!, repo);
+            var vm = new NotesListViewModel(repo, searchService, windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+
+            // 模拟用户输入搜索词
+            vm.SearchText = "测试";
+            Assert.AreEqual("测试", vm.SearchText);
+            Assert.IsTrue(vm.IsSearching);
+
+            // 触发关闭（无论最小化到托盘还是真正关闭）
+            win.Close();
+
+            // 验证搜索词被清空且退出搜索状态
+            Assert.AreEqual(string.Empty, vm.SearchText);
+            Assert.IsFalse(vm.IsSearching);
+        });
+    }
+
+    [TestMethod]
+    public void NotesListWindow_KeyboardNavigation_SearchMode_DownUpEnterShouldWork()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var noteId = Guid.NewGuid();
+            var repo = new FakeNoteRepository
+            {
+                Notes =
+                {
+                    new Note { Id = noteId, Content = "第一条匹配内容\n包含测试关键字", Color = NoteColor.Blue },
+                    new Note { Id = Guid.NewGuid(), Content = "第二条匹配内容\n同样包含测试关键字", Color = NoteColor.Yellow }
+                }
+            };
+            var searchService = new SearchService();
+            var windowManager = new WindowManager(null!, repo);
+            var vm = new NotesListViewModel(repo, searchService, windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+
+            // 触发搜索
+            vm.SearchText = "测试";
+            var hits = searchService.Search(vm.Notes, "测试");
+            vm.SearchResults.Clear();
+            foreach (var h in hits) vm.SearchResults.Add(h);
+            vm.SearchHitCount = hits.Count;
+            vm.IsSearching = true;
+
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => { frame.Continue = false; }));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            var dummySource = new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero);
+
+            // 1. 在 SearchBox 按 Down -> 激活并选中首个命中项 (index = 0)
+            var downArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Down) { RoutedEvent = Keyboard.KeyDownEvent };
+            win.SearchBox_KeyDown(win.SearchBoxControl, downArgs);
+            Assert.IsTrue(downArgs.Handled);
+            Assert.AreEqual(0, win.SearchHitsListBoxControl.SelectedIndex);
+
+            // 2. 模拟切换至第 2 条 (index = 1)
+            win.SearchHitsListBoxControl.SelectedIndex = 1;
+            Assert.AreEqual(1, win.SearchHitsListBoxControl.SelectedIndex);
+
+            // 3. 在 index = 0 时按 Up -> 焦点退回 SearchBox
+            win.SearchHitsListBoxControl.SelectedIndex = 0;
+            var upArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Up) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.SearchHitsListBox_PreviewKeyDown(win.SearchHitsListBoxControl, upArgs);
+            Assert.IsTrue(upArgs.Handled);
+
+            // 4. 按 Enter -> 触发 JumpToSearchHit 处理并断言 Handled
+            var enterArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Enter) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.SearchHitsListBox_PreviewKeyDown(win.SearchHitsListBoxControl, enterArgs);
+            Assert.IsTrue(enterArgs.Handled);
+
+            dummySource.Dispose();
+        });
+    }
+
+    [TestMethod]
+    public void NotesListWindow_KeyboardNavigation_NormalMode_DownUpEnterShouldWork()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var note1 = new Note { Id = Guid.NewGuid(), Content = "常规便签1", Color = NoteColor.Blue };
+            var note2 = new Note { Id = Guid.NewGuid(), Content = "常规便签2", Color = NoteColor.Yellow };
+            var repo = new FakeNoteRepository
+            {
+                Notes = { note1, note2 }
+            };
+            var searchService = new SearchService();
+            var windowManager = new WindowManager(null!, repo);
+            var vm = new NotesListViewModel(repo, searchService, windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+            Assert.IsFalse(vm.IsSearching);
+
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => { frame.Continue = false; }));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            var dummySource = new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero);
+
+            // 1. 在 SearchBox 按 Down -> 激活并选中首个便签 (index = 0)
+            var downArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Down) { RoutedEvent = Keyboard.KeyDownEvent };
+            win.SearchBox_KeyDown(win.SearchBoxControl, downArgs);
+            Assert.IsTrue(downArgs.Handled);
+            Assert.AreEqual(0, win.NotesListBoxControl.SelectedIndex);
+
+            // 2. 在 index = 0 时按 Up -> 焦点退回 SearchBox
+            var upArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Up) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.NotesListBox_PreviewKeyDown(win.NotesListBoxControl, upArgs);
+            Assert.IsTrue(upArgs.Handled);
+
+            // 3. 按 Enter -> 触发 OpenNote 处理并断言 Handled
+            var enterArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Enter) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.NotesListBox_PreviewKeyDown(win.NotesListBoxControl, enterArgs);
+            Assert.IsTrue(enterArgs.Handled);
+
+            dummySource.Dispose();
         });
     }
 
