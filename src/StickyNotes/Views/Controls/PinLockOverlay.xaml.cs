@@ -109,7 +109,7 @@ public partial class PinLockOverlay : UserControl
         translate.BeginAnimation(TranslateTransform.XProperty, animation);
     }
 
-    private void ForgotPin_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void ForgotPin_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
             "PIN 为轻量防偷窥保护，不提供应用内找回。\n\n" +

@@ -185,6 +185,17 @@ public partial class NoteWindow : Window
                 e.Handled = true;
             }
         }
+
+        // 纯键盘用户离开编辑区的通道（F-P1-11 剩余项）：编辑区 AcceptsTab="True" 会吞掉 Tab
+        // 用于插入制表符，若无本通道，键盘用户进入正文后将无法用键盘到达任何工具按钮。
+        // 仅在焦点确实位于正文编辑区时拦截，避免影响其它控件的 Esc/Tab 行为。
+        if ((e.Key == Key.Escape ||
+             (e.Key == Key.Tab && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control))
+            && Keyboard.FocusedElement == EditorTextBox)
+        {
+            EditorTextBox.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+            e.Handled = true;
+        }
     }
 
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
