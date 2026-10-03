@@ -345,6 +345,74 @@ public class UiRenderingAndScreenshotTests
     }
 
     [TestMethod]
+    public void NotesListWindow_Reactivation_RestoresOptimalFocus_AndAllowsArrowNavigation()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var noteId1 = Guid.NewGuid();
+            var noteId2 = Guid.NewGuid();
+            var repo = new FakeNoteRepository
+            {
+                Notes =
+                {
+                    new Note { Id = noteId1, Content = "第一条测试便签", Color = NoteColor.Blue },
+                    new Note { Id = noteId2, Content = "第二条测试便签", Color = NoteColor.Green }
+                }
+            };
+            var searchService = new SearchService();
+            var windowManager = new WindowManager(null!, repo);
+            var vm = new NotesListViewModel(repo, searchService, windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+
+            // 1. 模拟搜索
+            vm.SearchText = "测试";
+            var hits = searchService.Search(vm.Notes, "测试");
+            vm.SearchResults.Clear();
+            foreach (var h in hits) vm.SearchResults.Add(h);
+            vm.SearchHitCount = hits.Count;
+            vm.IsSearching = true;
+
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => { frame.Continue = false; }));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            // 模拟用户点击或打开了第 1 个搜索结果 (index = 0)
+            win.SearchHitsListBoxControl.SelectedIndex = 0;
+            win.SearchHitsListBoxControl.SelectedItem = vm.SearchResults[0];
+
+            // 模拟便签窗口关闭，主管理窗口激活，调用 RestoreOptimalFocus
+            win.RestoreOptimalFocus();
+            Assert.AreEqual(0, win.SearchHitsListBoxControl.SelectedIndex);
+
+            var dummySource = new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero);
+
+            // 2. 验证当焦点未在输入框时，在窗口层面按 Down 键仍可平滑下移至第 2 项 (index = 1)
+            var downArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Down) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.RaiseEvent(downArgs);
+            Assert.IsTrue(downArgs.Handled);
+            Assert.AreEqual(1, win.SearchHitsListBoxControl.SelectedIndex);
+
+            // 3. 验证在窗口层面按 Up 键可退回第 1 项 (index = 0)
+            var upArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Up) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.RaiseEvent(upArgs);
+            Assert.IsTrue(upArgs.Handled);
+            Assert.AreEqual(0, win.SearchHitsListBoxControl.SelectedIndex);
+
+            // 4. 验证在 index = 0 时再次按 Up 键，焦点退回搜索框
+            var upToSearchBoxArgs = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.Up) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            win.RaiseEvent(upToSearchBoxArgs);
+            Assert.IsTrue(upToSearchBoxArgs.Handled);
+
+            dummySource.Dispose();
+        });
+    }
+
+    [TestMethod]
     public void Render_NoteWindow_Yellow_SavesSnapshot()
     {
         TestEnvironment.RunInSta(() =>

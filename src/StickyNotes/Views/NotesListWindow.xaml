@@ -182,6 +182,8 @@
                 <!-- 普通列表模式：一体化通体原色 Fluent 便签卡片流 (支持全键盘上下/翻页/顶底导航) -->
                 <ListBox x:Name="NotesListBox"
                          ItemsSource="{Binding FilteredNotes}"
+                         FocusVisualStyle="{x:Null}"
+                         IsTabStop="False"
                          Background="Transparent"
                          BorderThickness="0"
                          Padding="0"
@@ -192,6 +194,7 @@
                          VirtualizingPanel.VirtualizationMode="Recycling"
                          VirtualizingPanel.ScrollUnit="Pixel"
                          Visibility="{Binding IsSearching, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                         GotKeyboardFocus="ListBox_GotKeyboardFocus"
                          PreviewKeyDown="NotesListBox_PreviewKeyDown">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
@@ -377,6 +380,8 @@
                 <Grid Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}">
                     <ListBox x:Name="SearchHitsListBox"
                              ItemsSource="{Binding SearchResults}"
+                             FocusVisualStyle="{x:Null}"
+                             IsTabStop="False"
                              Background="Transparent"
                              BorderThickness="0"
                              Padding="0"
@@ -386,6 +391,7 @@
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling"
                              VirtualizingPanel.ScrollUnit="Pixel"
+                             GotKeyboardFocus="ListBox_GotKeyboardFocus"
                              PreviewKeyDown="SearchHitsListBox_PreviewKeyDown">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
@@ -407,16 +413,31 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:SearchHit}">
                                 <Border CornerRadius="{StaticResource CornerRadius.Card}"
-                                        Background="{StaticResource Fluent.CardDefaultBgBrush}"
-                                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                                        Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+                                        BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
                                         BorderThickness="1"
                                         Padding="{StaticResource Thickness.SearchHitPadding}"
                                         Cursor="Hand"
                                         MouseLeftButtonDown="SearchHitCard_MouseLeftButtonDown">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Effect" Value="{StaticResource Elevation.Card}" />
+                                            <Setter Property="Effect">
+                                                <Setter.Value>
+                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Direction="270" />
+                                                </Setter.Value>
+                                            </Setter>
                                             <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="False" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Effect">
+                                                        <Setter.Value>
+                                                            <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.10" Direction="270" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </MultiDataTrigger>
                                                 <!-- 键盘或鼠标选中：Windows 11 Fluent 2px 强调色聚焦轮廓 -->
                                                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                                     <Setter Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
@@ -430,104 +451,101 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
-                                        <Grid>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                                            <!-- 便签所属色标、标题与第 N 行指示器 -->
-                                            <Grid Grid.Row="0">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
+                                        <!-- 便签所属色标、标题与第 N 行指示器 -->
+                                        <Grid Grid.Row="0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
 
-                                                <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
-                                                    <!-- 对应便签原色圆点 -->
-                                                    <Border Width="10" Height="10"
-                                                            CornerRadius="5"
-                                                            Background="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
-                                                            Margin="0,0,8,0" />
-                                                    <TextBlock Text="{Binding NoteTitle}"
-                                                               Style="{StaticResource Type.Subtitle}"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding NoteTitle}"
+                                                           Style="{StaticResource Type.Subtitle}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
 
-                                                <!-- 右侧：更新时间与行号胶囊 -->
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}}"
-                                                               Style="{StaticResource Type.CaptionSubtle}"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center" />
-                                                    <Border Background="{StaticResource Fluent.AccentLightBgBrush}"
-                                                            BorderBrush="{StaticResource Fluent.AccentLightBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="{StaticResource CornerRadius.Small}"
-                                                            Padding="6,2">
-                                                        <TextBlock Style="{StaticResource Type.CaptionSubtle}"
-                                                                   FontWeight="SemiBold"
-                                                                   Foreground="{StaticResource Fluent.AccentBrush}">
-                                                            <Run Text="第 " /><Run Text="{Binding LineNumber}" /><Run Text=" 行" />
-                                                        </TextBlock>
-                                                    </Border>
-                                                </StackPanel>
-                                            </Grid>
+                                            <!-- 右侧：更新时间与行号胶囊 -->
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}}"
+                                                           Style="{StaticResource Type.CaptionSubtle}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                                                           Margin="0,0,8,0"
+                                                           VerticalAlignment="Center" />
+                                                <Border Background="{Binding Color, Converter={StaticResource NoteColorToToolbarConverter}}"
+                                                        BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="{StaticResource CornerRadius.Small}"
+                                                        Padding="6,2">
+                                                    <TextBlock Style="{StaticResource Type.CaptionSubtle}"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}">
+                                                        <Run Text="第 " /><Run Text="{Binding LineNumber}" /><Run Text=" 行" />
+                                                    </TextBlock>
+                                                </Border>
+                                            </StackPanel>
+                                        </Grid>
 
-                                            <!-- 1~3 行智能上下文行预览 (支持关键词高亮) -->
-                                            <Border Grid.Row="1"
-                                                    Background="{StaticResource Fluent.WindowBgBrush}"
-                                                    CornerRadius="{StaticResource CornerRadius.Small}"
-                                                    Padding="10,8"
-                                                    Margin="0,8,0,0">
-                                                <ItemsControl ItemsSource="{Binding Lines}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate DataType="{x:Type models:SnippetLine}">
-                                                            <ItemsControl ItemsSource="{Binding Segments}" Margin="0,1">
-                                                                <ItemsControl.ItemsPanel>
-                                                                    <ItemsPanelTemplate>
-                                                                        <WrapPanel Orientation="Horizontal" />
-                                                                    </ItemsPanelTemplate>
-                                                                </ItemsControl.ItemsPanel>
-                                                                <ItemsControl.ItemTemplate>
-                                                                    <DataTemplate DataType="{x:Type models:SnippetSegment}">
-                                                                        <Border CornerRadius="3"
-                                                                                Padding="2,0"
-                                                                                Margin="0,0">
-                                                                            <Border.Style>
-                                                                                <Style TargetType="Border">
-                                                                                    <Setter Property="Background" Value="Transparent" />
+                                        <!-- 1~3 行智能上下文行预览 (支持关键词高亮) -->
+                                        <Border Grid.Row="1"
+                                                Background="#08000000"
+                                                CornerRadius="{StaticResource CornerRadius.Small}"
+                                                Padding="10,8"
+                                                Margin="0,8,0,0">
+                                            <ItemsControl ItemsSource="{Binding Lines}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type models:SnippetLine}">
+                                                        <ItemsControl ItemsSource="{Binding Segments}" Margin="0,1">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate DataType="{x:Type models:SnippetSegment}">
+                                                                    <Border CornerRadius="3"
+                                                                            Padding="2,0"
+                                                                            Margin="0,0">
+                                                                        <Border.Style>
+                                                                            <Style TargetType="Border">
+                                                                                <Setter Property="Background" Value="Transparent" />
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsHit}" Value="True">
+                                                                                        <Setter Property="Background" Value="#FFFDE047" />
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Border.Style>
+                                                                        <TextBlock Text="{Binding Text}">
+                                                                            <TextBlock.Style>
+                                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
+                                                                                    <Setter Property="Foreground" Value="{Binding DataContext.Color, RelativeSource={RelativeSource AncestorType=ListBoxItem}, Converter={StaticResource NoteColorToTextConverter}}" />
                                                                                     <Style.Triggers>
                                                                                         <DataTrigger Binding="{Binding IsHit}" Value="True">
-                                                                                            <Setter Property="Background" Value="#FFFDE047" />
+                                                                                            <Setter Property="Foreground" Value="#FF1F2937" />
+                                                                                            <Setter Property="FontWeight" Value="SemiBold" />
                                                                                         </DataTrigger>
                                                                                     </Style.Triggers>
                                                                                 </Style>
-                                                                            </Border.Style>
-                                                                            <TextBlock Text="{Binding Text}">
-                                                                                <TextBlock.Style>
-                                                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
-                                                                                        <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
-                                                                                        <Style.Triggers>
-                                                                                            <DataTrigger Binding="{Binding IsHit}" Value="True">
-                                                                                                <Setter Property="Foreground" Value="#FF1F2937" />
-                                                                                                <Setter Property="FontWeight" Value="SemiBold" />
-                                                                                            </DataTrigger>
-                                                                                        </Style.Triggers>
-                                                                                    </Style>
-                                                                                </TextBlock.Style>
-                                                                            </TextBlock>
-                                                                        </Border>
-                                                                    </DataTemplate>
-                                                                </ItemsControl.ItemTemplate>
-                                                            </ItemsControl>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
+                                                                            </TextBlock.Style>
+                                                                        </TextBlock>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
 
