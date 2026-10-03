@@ -27,6 +27,18 @@
   </PropertyGroup>
 
   <!--
+    质量闸门：把警告当作错误，避免「当前恰好 0 警告」在无 CI 的情况下悄悄退化。
+    CS0618（过时 API）暂只提升为警告汇总，不阻断构建 —— 若后续依赖升级引入批量过时告警，
+    应先逐条处置再收紧，而不是让构建大面积变红。
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS0618</WarningsNotAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+  <!--
     GenerateCustomVersion: 计算并填充版本号 + 注入 AssemblyMetadata。
     BeforeTargets 选择 GetAssemblyVersion 以保证 AssemblyVersion/FileVersion
     在生成 AssemblyInfo 之前已就位。
@@ -55,13 +67,17 @@
     <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
       <VersionSuffix>debug</VersionSuffix>
     </PropertyGroup>
-    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-      <VersionSuffix>$(BuildDate)-$(GitCommitHash)</VersionSuffix>
-    </PropertyGroup>
 
-    <!-- 4. 核心版本号（统一设置） -->
+    <!--
+      4. 核心版本号（统一设置）。
+      注意：Release 的 Version/InformationalVersion 保持**纯语义版本**（如 1.1.2），
+      不再拼入构建日期与提交号 —— 否则同一份源码在不同时间构建会得到不同版本号，
+      导致「无法用版本号定位问题」且 CI/本地缓存全部失效。
+      构建时间与提交号只进下面的 AssemblyMetadata（供设置页「关于」展示）。
+    -->
     <PropertyGroup>
-      <Version>$(VersionPrefix)-$(VersionSuffix)</Version>
+      <Version Condition="'$(Configuration)' == 'Debug'">$(VersionPrefix)-$(VersionSuffix)</Version>
+      <Version Condition="'$(Configuration)' != 'Debug'">$(VersionPrefix)</Version>
       <InformationalVersion>$(Version)</InformationalVersion>
     </PropertyGroup>
 
