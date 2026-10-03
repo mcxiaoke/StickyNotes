@@ -16,7 +16,12 @@ public sealed class HotKeyService : IDisposable
 
     private readonly SettingsService _settingsService;
     private HwndSource? _hwndSource;
-    private bool _isRegistered;
+
+    /// <summary>当前注册成功的热键 ID 集合（按键级跟踪，支持失败键的后续重试）</summary>
+    private readonly HashSet<int> _registeredIds = new();
+
+    /// <summary>是否至少有一个全局热键处于注册成功状态</summary>
+    public bool IsRegistered => _registeredIds.Count > 0;
 
     public HotKeyService(SettingsService settingsService)
     {
@@ -61,46 +66,46 @@ public sealed class HotKeyService : IDisposable
 
     public void RegisterHotKeys()
     {
-        if (_hwndSource == null || _isRegistered) return;
+        if (_hwndSource == null) return;
 
         IntPtr handle = _hwndSource.Handle;
         uint modifiers = NativeMethods.MOD_WIN | NativeMethods.MOD_ALT | NativeMethods.MOD_NOREPEAT;
 
-        // 1. 注册 Win+Alt+N (新建便签)
-        bool successN = NativeMethods.RegisterHotKey(handle, HotKeyId_NewNote, modifiers, NativeMethods.VK_N);
-        if (successN)
+        // 按键级注册：已成功的键跳过（重复 RegisterHotKey 会失败并被误报为「被占用」），
+        // 失败的键在下次开关热键或重进设置时自动重试。
+        // 原实现用单个 _isRegistered 布尔：部分成功后再调用本方法会整体短路，
+        // 失败的那一个键永远没有重试机会（N-11）。
+        TryRegisterHotKey(handle, HotKeyId_NewNote, modifiers, NativeMethods.VK_N, "Win+Alt+N", "快速新建");
+        TryRegisterHotKey(handle, HotKeyId_ShowList, modifiers, NativeMethods.VK_H, "Win+Alt+H", "呼出列表");
+
+        AppLog.Info($"[HotKeyService] 全局热键注册结果: 已成功 {_registeredIds.Count}/2");
+    }
+
+    private void TryRegisterHotKey(IntPtr handle, int id, uint modifiers, uint vk, string name, string purpose)
+    {
+        if (_registeredIds.Contains(id)) return;
+
+        if (NativeMethods.RegisterHotKey(handle, id, modifiers, vk))
         {
-            AppLog.Info("[HotKeyService] 全局热键 Win+Alt+N 注册成功 (快速新建)");
+            _registeredIds.Add(id);
+            AppLog.Info($"[HotKeyService] 全局热键 {name} 注册成功 ({purpose})");
         }
         else
         {
-            AppLog.Warn("[HotKeyService] 全局热键 Win+Alt+N 注册失败 (可能被其它软件占用)");
+            AppLog.Warn($"[HotKeyService] 全局热键 {name} 注册失败 (可能被其它软件占用)");
         }
-
-        // 2. 注册 Win+Alt+H (呼出主列表)
-        bool successH = NativeMethods.RegisterHotKey(handle, HotKeyId_ShowList, modifiers, NativeMethods.VK_H);
-        if (successH)
-        {
-            AppLog.Info("[HotKeyService] 全局热键 Win+Alt+H 注册成功 (呼出列表)");
-        }
-        else
-        {
-            AppLog.Warn("[HotKeyService] 全局热键 Win+Alt+H 注册失败 (可能被其它软件占用)");
-        }
-
-        // 仅在至少一个热键真正注册成功时才置位，否则保留 false 以便用户关闭再开启开关时能够重试注册
-        _isRegistered = successN || successH;
-        AppLog.Info($"[HotKeyService] 全局热键注册结果: Win+Alt+N={successN}, Win+Alt+H={successH}, IsRegistered={_isRegistered}");
     }
 
     public void UnregisterHotKeys()
     {
-        if (_hwndSource == null || !_isRegistered) return;
+        if (_hwndSource == null || _registeredIds.Count == 0) return;
 
         IntPtr handle = _hwndSource.Handle;
-        NativeMethods.UnregisterHotKey(handle, HotKeyId_NewNote);
-        NativeMethods.UnregisterHotKey(handle, HotKeyId_ShowList);
-        _isRegistered = false;
+        foreach (var id in _registeredIds)
+        {
+            NativeMethods.UnregisterHotKey(handle, id);
+        }
+        _registeredIds.Clear();
         AppLog.Info("[HotKeyService] 全局热键已注销");
     }
 
