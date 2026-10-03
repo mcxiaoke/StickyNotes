@@ -47,12 +47,20 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) =>
         {
             AppLog.Error($"[App] Dispatcher 未处理异常: {args.Exception.Message}", args.Exception);
+
             try
             {
                 _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
             }
-            catch { }
-            args.Handled = true;
+            catch (Exception flushEx)
+            {
+                AppLog.Error($"[App] 异常兜底刷盘失败: {flushEx.Message}", flushEx);
+            }
+
+            // 仅对「已知可恢复」的异常标记为已处理，其余一律放行，让应用按正常崩溃路径退出。
+            // 原实现无条件 args.Handled = true，会把破坏数据一致性的严重异常也吞掉，
+            // 使应用在半坏状态下继续运行且用户毫无提示（原 F-P2-28）。
+            args.Handled = IsRecoverable(args.Exception);
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
@@ -65,7 +73,10 @@ public partial class App : Application
             {
                 _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
             }
-            catch { }
+            catch (Exception flushEx)
+            {
+                AppLog.Error($"[App] AppDomain 异常兜底刷盘失败: {flushEx.Message}", flushEx);
+            }
         };
 
         TaskScheduler.UnobservedTaskException += (_, args) =>
@@ -84,21 +95,45 @@ public partial class App : Application
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();
 
-        // 5. 初始化数据库与执行 PRAGMA 增量迁移
-        var dbCtx = _serviceProvider.GetRequiredService<SqliteDatabaseContext>();
-        await dbCtx.InitializeAndMigrateAsync();
+        // 5. 初始化数据库与执行 PRAGMA 增量迁移。
+        // 整个启动链必须显式兜底：OnStartup 是 async void，若在此处抛异常，
+        // DispatcherUnhandledException 会把它记为已处理，而此时既无主窗口也无托盘图标，
+        // 进程却继续存活并已持有单实例 Mutex —— 用户此后双击快捷方式一律被判定为
+        // 「第二实例」而秒退，表现为「点了没反应，且再也打不开」（原 F-P1-3）。
+        try
+        {
+            var dbCtx = _serviceProvider.GetRequiredService<SqliteDatabaseContext>();
+            await dbCtx.InitializeAndMigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[App] 数据库初始化/迁移失败，启动中止: {ex.Message}", ex);
+            ShowStartupFailure(AppPaths.DatabasePath, ex);
+            Shutdown(1);
+            return;
+        }
 
         // 6. 每日启动冷备份在后台线程异步执行，不阻塞 UI 渲染呈现
         _ = Task.Run(() => BackupService.RunDailyBackupIfNeeded());
 
         // 7. 恢复上次未关闭的便签贴纸（保持原位与物理尺寸）
-        var repo = _serviceProvider.GetRequiredService<INoteRepository>();
-        var windowManager = _serviceProvider.GetRequiredService<WindowManager>();
-        var allActive = await repo.GetAllActiveAsync();
-
-        foreach (var note in allActive.Where(n => n.IsOpen))
+        try
         {
-            windowManager.OpenOrActivateNote(note);
+            var repo = _serviceProvider.GetRequiredService<INoteRepository>();
+            var windowManager = _serviceProvider.GetRequiredService<WindowManager>();
+            var allActive = await repo.GetAllActiveAsync();
+
+            foreach (var note in allActive.Where(n => n.IsOpen))
+            {
+                windowManager.OpenOrActivateNote(note);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[App] 恢复桌面便签失败，启动中止: {ex.Message}", ex);
+            ShowStartupFailure(AppPaths.DatabasePath, ex);
+            Shutdown(1);
+            return;
         }
 
         // 8. 保持后台托盘常驻模式
@@ -129,6 +164,54 @@ public partial class App : Application
             await Task.Delay(5000);
             NativeMethods.TrimWorkingSet();
         });
+    }
+
+    /// <summary>
+    /// 判断异常是否属于「已知可恢复」类别。只有这类异常才允许被标记为已处理并继续运行；
+    /// 数据一致性、IO、内存等严重异常一律放行，交由正常崩溃路径处理并留下可见痕迹。
+    /// </summary>
+    private static bool IsRecoverable(Exception ex) => ex switch
+    {
+        // 纯 UI/输入层的瞬时异常，不涉及数据与资源状态
+        InvalidOperationException => false,
+        NotSupportedException => false,
+        System.Windows.Markup.XamlParseException => false,
+
+        // 明确的 IO / 内存 / 数据库类异常绝不吞掉
+        System.IO.IOException => false,
+        UnauthorizedAccessException => false,
+        OutOfMemoryException => false,
+        Microsoft.Data.Sqlite.SqliteException => false,
+
+        // ArgumentException 多由绑定/转换器参数引起，属可恢复的表现层问题
+        ArgumentException => true,
+
+        // 其余未知异常默认放行，避免把真实故障变成静默半坏状态
+        _ => false
+    };
+
+    /// <summary>
+    /// 启动失败时给出可读提示（含数据库路径与日志路径），避免静默僵尸进程占死单实例 Mutex
+    /// </summary>
+    private void ShowStartupFailure(string databasePath, Exception ex)
+    {
+        try
+        {
+            MessageBox.Show(
+                "StickyNotes 启动失败，已安全退出。\n\n" +
+                $"原因：{ex.Message}\n\n" +
+                $"数据库：{databasePath}\n" +
+                $"日志：{AppPaths.LogsDirectory}\n\n" +
+                "可尝试：从 backups/ 目录恢复一份备份，或重命名数据库文件后重新启动。",
+                "启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch (Exception showEx)
+        {
+            // 弹窗本身失败时至少保证日志里有记录
+            AppLog.Error($"[App] 启动失败提示框展示失败: {showEx.Message}", showEx);
+        }
     }
 
     private void OnSessionEnding(object? sender, SessionEndingEventArgs e)

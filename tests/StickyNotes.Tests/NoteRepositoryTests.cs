@@ -218,5 +218,126 @@ public class NoteRepositoryTests
         Assert.AreEqual(1, activeAfter.Count);
         Assert.AreEqual(activeNote.Id, activeAfter[0].Id);
     }
+
+    /// <summary>
+    /// F-P1-5 验证（路径 a）：全新数据库建库后，V1 建表**不含** V2 两列，
+    /// 由 V2 迁移通过 ALTER 补齐；最终 schema 版本为 2 且列齐全、可正常读写。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P1_5_FreshDatabase_MigratesToV2_WithBothColumnsAddedByAlter()
+    {
+        var dbPath = Path.Combine(AppPaths.DataDirectory, $"fresh_{Guid.NewGuid():N}.db");
+        try
+        {
+            var ctx = new SqliteDatabaseContext(dbPath);
+            await ctx.InitializeAndMigrateAsync();
+
+            await using var conn = ctx.CreateConnection();
+            await conn.OpenAsync();
+
+            // 版本必须是 2
+            await using (var verCmd = conn.CreateCommand())
+            {
+                verCmd.CommandText = "PRAGMA user_version;";
+                var ver = Convert.ToInt32(await verCmd.ExecuteScalarAsync());
+                Assert.AreEqual(2, ver, "全新库迁移后版本应为 2");
+            }
+
+            // 两列必须存在
+            var columns = new List<string>();
+            await using (var infoCmd = conn.CreateCommand())
+            {
+                infoCmd.CommandText = "PRAGMA table_info(Notes);";
+                await using var reader = await infoCmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    columns.Add(reader.GetString(1));
+                }
+            }
+
+            CollectionAssert.Contains(columns, "IsPinnedInList", "V2 迁移必须补齐 IsPinnedInList 列");
+            CollectionAssert.Contains(columns, "AlwaysOnTop", "V2 迁移必须补齐 AlwaysOnTop 列");
+            CollectionAssert.Contains(columns, "IsPinned", "V1 的 IsPinned 列必须保留");
+
+            // 可正常读写
+            var repo = new NoteRepository(ctx);
+            var note = new Note { Id = Guid.NewGuid(), Content = "全新库写入", IsPinnedInList = true };
+            await repo.SaveAsync(note);
+            var loaded = await repo.GetByIdAsync(note.Id);
+            Assert.IsNotNull(loaded);
+            Assert.IsTrue(loaded.IsPinnedInList);
+        }
+        finally
+        {
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// F-P1-5 验证（路径 b）：历史遗留库（早期版本在 V1 建表时就带上了 V2 两列）升级时，
+    /// 迁移必须幂等 —— 跳过 ALTER、不抛异常、不靠 catch 掩盖，并正确继承 IsPinned。
+    /// 这是原报告指出「两条路径只覆盖一条」中缺失的那条。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P1_5_LegacyDatabaseWithV2ColumnsAlreadyPresent_MigratesIdempotently()
+    {
+        var dbPath = Path.Combine(AppPaths.DataDirectory, $"legacy_{Guid.NewGuid():N}.db");
+        try
+        {
+            // 手工构造一个「v1 版本号，但表里已含 V2 两列」的遗留库
+            var ctx = new SqliteDatabaseContext(dbPath);
+            await using (var conn = ctx.CreateConnection())
+            {
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE Notes (
+                        Id             TEXT PRIMARY KEY,
+                        Content        TEXT NOT NULL DEFAULT '',
+                        Color          INTEGER NOT NULL DEFAULT 0,
+                        IsPinned       INTEGER NOT NULL DEFAULT 0,
+                        IsPinnedInList INTEGER NOT NULL DEFAULT 0,
+                        AlwaysOnTop    INTEGER NOT NULL DEFAULT 0,
+                        IsDeleted      INTEGER NOT NULL DEFAULT 0,
+                        WindowX        REAL NOT NULL DEFAULT 150,
+                        WindowY        REAL NOT NULL DEFAULT 150,
+                        WindowWidth    REAL NOT NULL DEFAULT 320,
+                        WindowHeight   REAL NOT NULL DEFAULT 360,
+                        IsOpen         INTEGER NOT NULL DEFAULT 1,
+                        CreatedAt      TEXT NOT NULL,
+                        UpdatedAt      TEXT NOT NULL
+                    );
+                    INSERT INTO Notes (Id, Content, IsPinned, CreatedAt, UpdatedAt)
+                    VALUES ('11111111-1111-1111-1111-111111111111', '遗留便签', 1, '2026-01-01T00:00:00.0000000Z', '2026-01-01T00:00:00.0000000Z');
+                    PRAGMA user_version = 1;
+                    """;
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // 迁移必须成功且不抛异常（旧实现会走 catch 掩盖后再强推版本号）
+            await ctx.InitializeAndMigrateAsync();
+
+            await using var conn2 = ctx.CreateConnection();
+            await conn2.OpenAsync();
+
+            await using (var verCmd = conn2.CreateCommand())
+            {
+                verCmd.CommandText = "PRAGMA user_version;";
+                var ver = Convert.ToInt32(await verCmd.ExecuteScalarAsync());
+                Assert.AreEqual(2, ver, "遗留库迁移后版本应提升为 2");
+            }
+
+            // IsPinned = 1 必须被继承到两个新字段
+            var repo = new NoteRepository(ctx);
+            var legacy = await repo.GetByIdAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+            Assert.IsNotNull(legacy, "遗留数据必须完好保留");
+            Assert.IsTrue(legacy.IsPinnedInList, "IsPinned 应被继承到 IsPinnedInList");
+            Assert.IsTrue(legacy.AlwaysOnTop, "IsPinned 应被继承到 AlwaysOnTop");
+        }
+        finally
+        {
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+        }
+    }
 }
 
