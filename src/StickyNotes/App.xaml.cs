@@ -186,6 +186,7 @@ public partial class App : Application
 
         // 领域服务与配置
         services.AddSingleton<SettingsService>();
+        services.AddSingleton<PinService>();
         services.AddSingleton<ExportImportService>();
         services.AddSingleton<ISearchService, SearchService>();
         services.AddSingleton<AutoSaveCoordinator>(sp => 

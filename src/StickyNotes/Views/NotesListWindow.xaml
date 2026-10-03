@@ -3,6 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:models="clr-namespace:StickyNotes.Models"
+                 xmlns:controls="clr-namespace:StickyNotes.Views.Controls"
                  Title="彩色便签"
                  Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
                  Width="480" Height="720"
@@ -502,6 +503,9 @@
                 </ScrollViewer>
             </Grid>
         </Grid>
+        <!-- 1. PIN 锁定遮罩：盖住内容区（保留标题栏可拖动/关闭），锁定时完全遮挡便签内容 -->
+        <controls:PinLockOverlay x:Name="PinOverlay"
+                                 Grid.Row="1" />
     </Grid>
 </ui:FluentWindow>
 

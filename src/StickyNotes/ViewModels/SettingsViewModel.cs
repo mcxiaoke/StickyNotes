@@ -8,10 +8,13 @@ using Microsoft.Win32;
 using StickyNotes.Infrastructure;
 using StickyNotes.Messages;
 using StickyNotes.Services;
+using StickyNotes.Views;
 
 namespace StickyNotes.ViewModels;
 
 public record FontSizeOption(string Label, double Size);
+
+public record AutoCloseOption(string Label, int Minutes);
 
 /// <summary>
 /// 应用程序独立设置窗口 ViewModel
@@ -21,6 +24,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly SettingsService _settingsService;
     private readonly ExportImportService _exportImportService;
     private readonly AutoStartService? _autoStartService;
+    private readonly PinService? _pinService;
 
     public IReadOnlyList<FontSizeOption> FontSizeOptions { get; } = new List<FontSizeOption>
     {
@@ -32,8 +36,20 @@ public partial class SettingsViewModel : ObservableObject
         new("超大 (24 pt)", 24.0)
     };
 
+    public IReadOnlyList<AutoCloseOption> AutoCloseOptions { get; } = new List<AutoCloseOption>
+    {
+        new("不启用", 0),
+        new("离开 1 分钟后", 1),
+        new("离开 5 分钟后", 5),
+        new("离开 10 分钟后", 10),
+        new("离开 30 分钟后", 30)
+    };
+
     [ObservableProperty]
     private double _selectedFontSize;
+
+    [ObservableProperty]
+    private int _selectedAutoCloseMinutes;
 
     public string PreviewText => "这是一条便签示例文本：支持纯文本与多行输入，清晰易读 (StickyNotes 123 ABC)";
 
@@ -98,16 +114,25 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>PIN 锁定是否生效</summary>
+    public bool IsPinEnabled => _pinService?.IsPinEnabled ?? false;
+
+    /// <summary>PIN 锁定状态描述文字</summary>
+    public string PinStatusText => IsPinEnabled ? "已启用，打开列表与归档时需输入 PIN" : "未启用";
+
     public SettingsViewModel(
-        SettingsService settingsService, 
+        SettingsService settingsService,
         ExportImportService exportImportService,
-        AutoStartService? autoStartService = null)
+        AutoStartService? autoStartService = null,
+        PinService? pinService = null)
     {
         _settingsService = settingsService;
         _exportImportService = exportImportService;
         _autoStartService = autoStartService;
+        _pinService = pinService;
 
         _selectedFontSize = _settingsService.EditorFontSize;
+        _selectedAutoCloseMinutes = _settingsService.ListAutoCloseMinutes;
 
         // 获取程序集构建与版本信息
         var assembly = Assembly.GetExecutingAssembly();
@@ -124,6 +149,55 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnSelectedFontSizeChanged(double value)
     {
         _settingsService.SetEditorFontSize(value);
+    }
+
+    partial void OnSelectedAutoCloseMinutesChanged(int value)
+    {
+        _settingsService.ListAutoCloseMinutes = value;
+    }
+
+    /// <summary>解析用于弹对话框的宿主窗口（当前激活窗口或主窗口）</summary>
+    private static Window? GetOwnerWindow() =>
+        Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+        ?? Application.Current?.MainWindow;
+
+    private void RefreshPinState()
+    {
+        OnPropertyChanged(nameof(IsPinEnabled));
+        OnPropertyChanged(nameof(PinStatusText));
+    }
+
+    [RelayCommand]
+    private void EnablePin()
+    {
+        if (_pinService == null || IsPinEnabled) return;
+
+        if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Enable))
+        {
+            RefreshPinState();
+        }
+    }
+
+    [RelayCommand]
+    private void ChangePin()
+    {
+        if (_pinService == null || !IsPinEnabled) return;
+
+        if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Change))
+        {
+            RefreshPinState();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearPin()
+    {
+        if (_pinService == null || !IsPinEnabled) return;
+
+        if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Disable))
+        {
+            RefreshPinState();
+        }
     }
 
     [RelayCommand]
