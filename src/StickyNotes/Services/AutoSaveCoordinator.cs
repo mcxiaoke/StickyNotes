@@ -96,16 +96,20 @@ public sealed class AutoSaveCoordinator : IDisposable
     }
 
     /// <summary>
-    /// 强制立即执行指定便签的落盘保存（用于失焦、窗口关闭时）
+    /// 强制立即执行指定便签的落盘保存（用于失焦、窗口关闭时）。
+    /// 返回是否确实执行了一次保存（存在待保存调度并已完成）；false 表示无待保存调度。
     /// </summary>
-    public async Task FlushAsync(Guid noteId)
+    public async Task<bool> FlushAsync(Guid noteId)
     {
         if (_pendingTasks.TryRemove(noteId, out var info))
         {
             // 只取消、不释放：持有该 CTS 的延迟任务会在自身 finally 中释放
             CancelOnly(info.Cts);
             await info.SaveAction(info.Note);
+            return true;
         }
+
+        return false;
     }
 
     /// <summary>
