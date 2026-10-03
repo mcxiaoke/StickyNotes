@@ -72,8 +72,9 @@ if (-not (Test-Path (Join-Path $fdOut "portable.sample.ini")) -and (Test-Path $s
 }
 
 # ============================================================
-# 3. 构建免安装独立单文件版 (Self-Contained Single File)
+# 3. 构建免安装独立单文件版 (Self-Contained Single File) - [已注释停用]
 # ============================================================
+<#
 Write-Host "[3/5] 构建自包含单文件独立版 (无需安装 .NET 运行时)..." -ForegroundColor Yellow
 $scOut = Join-Path $pubTemp "standalone"
 & dotnet publish $srcProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --nologo -v minimal -o $scOut
@@ -84,26 +85,29 @@ Remove-Item (Join-Path $scOut "app_data") -Recurse -Force -ErrorAction SilentlyC
 if (-not (Test-Path (Join-Path $scOut "portable.sample.ini")) -and (Test-Path $sampleIniSrc)) {
     Copy-Item $sampleIniSrc (Join-Path $scOut "portable.sample.ini") -Force
 }
+#>
 
 # ============================================================
 # 4. 打包压缩为发布 zip
 # ============================================================
-Write-Host "[4/5] 压缩打包产物..." -ForegroundColor Yellow
+Write-Host "[3/4] 压缩打包产物..." -ForegroundColor Yellow
 
 $fdZip = Join-Path $distDir "StickyNotes-$Version-win-x64.zip"
 Compress-Archive -Path "$fdOut\*" -DestinationPath $fdZip -Force
 $releaseFiles += $fdZip
 Write-Host "  便携版 zip: $([math]::Round((Get-Item $fdZip).Length / 1MB, 2)) MB" -ForegroundColor DarkGray
 
+<#
 $scZip = Join-Path $distDir "StickyNotes-Standalone-$Version-win-x64.zip"
 Compress-Archive -Path "$scOut\*" -DestinationPath $scZip -Force
 $releaseFiles += $scZip
 Write-Host "  自包含单文件 zip: $([math]::Round((Get-Item $scZip).Length / 1MB, 2)) MB" -ForegroundColor DarkGray
+#>
 
 # ============================================================
-# 5. 生成 SHA256 校验和并清理临时目录
+# 4. 生成 SHA256 校验和并清理临时目录
 # ============================================================
-Write-Host "[5/5] 生成 SHA256 校验和清单..." -ForegroundColor Yellow
+Write-Host "[4/4] 生成 SHA256 校验和清单..." -ForegroundColor Yellow
 $checksumFile = Join-Path $distDir "SHA256SUMS.txt"
 $lines = @()
 
