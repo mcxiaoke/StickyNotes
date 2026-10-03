@@ -15,6 +15,14 @@ public static class AppLog
 
     private static bool _cleanupDone;
 
+    /// <summary>
+    /// 仅供测试使用的日志出口：设置后每条日志都会回调一次（含异常堆栈的完整文本）。
+    /// 用于在无法读取日志文件的环境下断言「是否记录了某类错误」，例如 F-P1-7 的
+    /// <c>ObjectDisposedException</c> 是否被自动保存的通用 catch 误记为失败。
+    /// 生产代码从不设置该委托，仅多一次空引用判断。
+    /// </summary>
+    internal static Action<string>? DiagnosticSinkForTest { get; set; }
+
     public static void Info(string message) => Write("INFO", message, null);
 
     public static void Warn(string message, Exception? ex = null) => Write("WARN", message, ex);
@@ -35,6 +43,9 @@ public static class AppLog
 
             // 输出到 Debug 控制台
             System.Diagnostics.Debug.Write(line);
+
+            // 测试出口（生产环境恒为 null）
+            DiagnosticSinkForTest?.Invoke(line);
 
             // 安全写入本地日志文件
             lock (_lock)
