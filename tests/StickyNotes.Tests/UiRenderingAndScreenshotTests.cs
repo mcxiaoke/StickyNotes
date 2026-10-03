@@ -692,6 +692,83 @@ public class UiRenderingAndScreenshotTests
         });
     }
 
+    /// <summary>
+    /// 回归（「清空归档」按钮一直是灰色）：CanClearArchived 是从集合派生的计算属性，
+    /// 而 LoadArchivedNotesAsync 采用原地 Clear/Add 变更集合 —— 集合实例未被替换，
+    /// 因此 [NotifyPropertyChangedFor] 生成的 setter 通知根本不会触发。
+    /// 必须在集合变更后显式发出 CanClearArchived 的 PropertyChanged，否则按钮
+    /// 会停留在窗口首次绑定时的取值（首次打开归档窗口时集合为空 → 永远灰色）。
+    /// </summary>
+    [TestMethod]
+    public void ArchivedNotes_CanClearArchived_NotifiesWhenListLoads()
+    {
+        var repo = new FakeNoteRepository
+        {
+            Notes =
+            {
+                new Note
+                {
+                    Id = Guid.NewGuid(),
+                    Content = string.Empty, // 空白便签归档（用户实际场景）
+                    IsDeleted = true,
+                    UpdatedAt = DateTime.UtcNow
+                }
+            }
+        };
+
+        var vm = new ArchivedNotesViewModel(repo);
+        var changed = new List<string>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? string.Empty);
+
+        Assert.IsFalse(vm.CanClearArchived, "加载前没有归档便签，按钮应为不可用");
+
+        vm.LoadArchivedNotesAsync().GetAwaiter().GetResult();
+
+        Assert.AreEqual(1, vm.ArchivedCount, "空白便签也应出现在归档列表");
+        Assert.IsTrue(vm.CanClearArchived, "有归档便签后「清空归档」应可用");
+        CollectionAssert.Contains(
+            changed,
+            nameof(ArchivedNotesViewModel.CanClearArchived),
+            "CanClearArchived 必须发出 PropertyChanged，否则按钮绑定不会刷新、一直保持灰色");
+    }
+
+    /// <summary>
+    /// 回归：走真实窗口 + 真实绑定，断言「清空归档」按钮在有归档便签时确实为可用
+    /// （从用户可见症状端锁定问题）。
+    /// </summary>
+    [TestMethod]
+    public void ArchivedNotesWindow_ClearButton_EnabledWhenArchivedNotesExist()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository
+            {
+                Notes =
+                {
+                    new Note { Id = Guid.NewGuid(), Content = string.Empty, IsDeleted = true, UpdatedAt = DateTime.UtcNow }
+                }
+            };
+
+            var vm = new ArchivedNotesViewModel(repo);
+            var win = new ArchivedNotesWindow(vm);
+
+            // 窗口构造时集合为空 → 绑定初值应为不可用
+            Assert.IsFalse(win.ClearAllButton.IsEnabled, "初始无归档便签时按钮应不可用");
+
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            Assert.AreEqual(1, vm.ArchivedCount, "Load 事件应已加载出归档便签");
+            Assert.IsTrue(win.ClearAllButton.IsEnabled, "有归档便签时「清空归档」按钮必须可用（不得为灰色）");
+
+            win.Close();
+        });
+    }
+
     [TestMethod]
     public void Render_SettingsWindow_Normal_SavesSnapshot()
     {
