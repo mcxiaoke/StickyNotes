@@ -138,7 +138,8 @@ public class TestEnvironment
     }
 
     /// <summary>
-    /// 在专用的全局 STA 线程上运行 UI 代码并捕获异常
+    /// 在专用的全局 STA 线程上运行 UI 代码并捕获异常。
+    /// 带超时保护（F-P2-27）：原先的无限 <c>Wait()</c> 会让一条挂死的 UI 用例永久挂住整个测试进程。
     /// </summary>
     public static void RunInSta(Action action)
     {
@@ -161,12 +162,38 @@ public class TestEnvironment
             }
         });
 
-        waitHandle.Wait();
+        if (!waitHandle.Wait(TimeSpan.FromMinutes(2)))
+        {
+            throw new TimeoutException(
+                "STA 测试线程 2 分钟内未返回，疑似 UI 用例挂死。" +
+                "（F-P2-27：原先的无限等待会挂住整个测试进程；超时上限保证 CI 可快速失败定位。）");
+        }
 
         if (captured != null)
         {
             throw new AggregateException("STA 测试线程抛出异常", captured);
         }
+    }
+
+    /// <summary>
+    /// 解析截图输出目录。优先向上定位仓库根（以 <c>StickyNotes.slnx</c> 为标记），
+    /// 输出到其 <c>temp/screenshots</c>；找不到标记时回退系统临时目录。
+    /// 原实现硬编码从输出目录上溯 5 层（F-P2-27），耦合输出目录层级，工程结构稍变就会写错位置。
+    /// </summary>
+    private static string ResolveScreenshotDirectory()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        for (int i = 0; i < 10 && dir != null; i++)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "StickyNotes.slnx")))
+            {
+                return Path.Combine(dir.FullName, "temp", "screenshots");
+            }
+
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(Path.GetTempPath(), "StickyNotes.Tests", "screenshots");
     }
 
     /// <summary>
@@ -210,8 +237,7 @@ public class TestEnvironment
         rtb.Render(target);
 
         // 保存至项目根目录下的 temp/screenshots
-        string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\..\.."));
-        string screenshotDir = Path.Combine(projectRoot, "temp", "screenshots");
+        string screenshotDir = ResolveScreenshotDirectory();
         Directory.CreateDirectory(screenshotDir);
 
         string fullPath = Path.Combine(screenshotDir, filename);
@@ -246,8 +272,7 @@ public class TestEnvironment
         var rtb = new RenderTargetBitmap(pxW, pxH, dpiValue, dpiValue, PixelFormats.Pbgra32);
         rtb.Render(element);
 
-        string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\..\.."));
-        string screenshotDir = Path.Combine(projectRoot, "temp", "screenshots");
+        string screenshotDir = ResolveScreenshotDirectory();
         Directory.CreateDirectory(screenshotDir);
 
         string fullPath = Path.Combine(screenshotDir, filename);
