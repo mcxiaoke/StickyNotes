@@ -805,5 +805,91 @@ public class UiRenderingAndScreenshotTests
             dummySource.Dispose();
         });
     }
+
+    /// <summary>
+    /// F-P2-22 验证：卡片阴影必须引用设计令牌中的**固定单例**，而非在 Style / Trigger 里内联
+    /// 新建 DropShadowEffect —— 后者每次 hover/选中都换一个 Effect 实例，而 WPF 的 Effect
+    /// 会强制该元素走软件渲染（列表滚动 + 鼠标划过时 CPU 飙升）。
+    /// 本用例从已加载的资源字典取令牌，并断言两个卡片实例拿到的是同一个对象引用。
+    /// </summary>
+    [TestMethod]
+    public void F_P2_22_CardShadow_ComesFromSharedResourceInstance()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            TestEnvironment.EnsureApplication();
+
+            foreach (var key in new[]
+                     {
+                         "Elevation.CardSubtle",
+                         "Elevation.CardHoverLight",
+                         "Elevation.CardFocus",
+                         "Elevation.TabSelected"
+                     })
+            {
+                var effect = Application.Current.TryFindResource(key);
+                Assert.IsNotNull(effect, $"设计令牌必须提供 {key}（卡片效果固定单例）");
+                Assert.IsInstanceOfType(effect, typeof(System.Windows.Media.Effects.DropShadowEffect),
+                    $"{key} 必须是 DropShadowEffect");
+            }
+
+            // 关键：同一令牌必须返回同一实例（共享单例），而不是每次解析都新建
+            var first = Application.Current.TryFindResource("Elevation.CardSubtle");
+            var second = Application.Current.TryFindResource("Elevation.CardSubtle");
+            Assert.AreSame(first, second, "效果令牌必须是共享单例，不得每次创建新实例");
+        });
+    }
+
+    /// <summary>
+    /// F-P2-22 验证：真实渲染出的卡片，其 Effect 必须与设计令牌是同一实例 ——
+    /// 说明绑定走的是 StaticResource 单例，而非在 Trigger 中内联新建。
+    /// </summary>
+    [TestMethod]
+    public void F_P2_22_RenderedCard_ReusesTokenEffect()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var note = new Note { Id = Guid.NewGuid(), Content = "阴影单例验证", Color = NoteColor.Yellow };
+            var repo = new FakeNoteRepository { Notes = { note } };
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
+            var vm = new NotesListViewModel(repo, new SearchService(), windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            var cards = FindDescendants(win).OfType<System.Windows.Controls.Border>()
+                .Where(b => b.Effect is System.Windows.Media.Effects.DropShadowEffect)
+                .ToList();
+
+            Assert.IsTrue(cards.Count > 0, "主列表应至少渲染出一张带阴影的卡片");
+
+            var tokenEffect = Application.Current.TryFindResource("Elevation.CardSubtle");
+            Assert.IsTrue(
+                cards.Any(c => ReferenceEquals(c.Effect, tokenEffect)),
+                "卡片阴影必须复用设计令牌的固定单例（若为内联新建实例则引用不等，即 F-P2-22 回归）");
+
+            win.Close();
+        });
+    }
+
+    private static IEnumerable<System.Windows.DependencyObject> FindDescendants(System.Windows.DependencyObject root)
+    {
+        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var descendant in FindDescendants(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
 }
 

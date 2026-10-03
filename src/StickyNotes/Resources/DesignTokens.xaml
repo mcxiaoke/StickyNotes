@@ -60,6 +60,15 @@
     <DropShadowEffect x:Key="Elevation.Popup" BlurRadius="14" ShadowDepth="3" Opacity="0.12" Direction="270" />
     <DropShadowEffect x:Key="Elevation.Window" BlurRadius="12" ShadowDepth="2" Opacity="0.14" Direction="270" />
 
+    <!-- 供 Style / ControlTemplate Trigger 引用的固定效果实例（原 F-P2-22）。
+         禁止在 Trigger 内联 new DropShadowEffect：那样每次 hover/选中都会换一个 Effect 实例，
+         而 WPF 的 Effect 会强制该元素走**软件渲染**，列表滚动 + 鼠标划过时 CPU 飙升。
+         统一引用此处的固定单例，既保留观感又去掉每次重建效果对象的开销。 -->
+    <DropShadowEffect x:Key="Elevation.CardSubtle" BlurRadius="4" ShadowDepth="1" Opacity="0.05" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.CardHoverLight" BlurRadius="8" ShadowDepth="1.5" Opacity="0.10" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.CardFocus" BlurRadius="10" ShadowDepth="2" Opacity="0.16" Direction="270" Color="#0067C0" />
+    <DropShadowEffect x:Key="Elevation.TabSelected" BlurRadius="4" ShadowDepth="1" Opacity="0.06" Direction="270" />
+
     <!-- ========================================================================= -->
     <!-- 5. 字体与排版体系（Typography Tokens）                                      -->
     <!-- ========================================================================= -->
@@ -161,11 +170,8 @@
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="TabBorder" Property="Background" Value="#FFFFFF" />
                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="#22000000" />
-                            <Setter TargetName="TabBorder" Property="Effect">
-                                <Setter.Value>
-                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.06" Direction="270" />
-                                </Setter.Value>
-                            </Setter>
+                            <!-- 引用固定效果单例，禁止在 Trigger 内联 DropShadowEffect（原 F-P2-22） -->
+                            <Setter TargetName="TabBorder" Property="Effect" Value="{StaticResource Elevation.TabSelected}" />
                             <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
