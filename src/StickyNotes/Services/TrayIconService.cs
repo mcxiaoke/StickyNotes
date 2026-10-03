@@ -2,28 +2,27 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using System.Windows.Media.Imaging;
+using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using H.NotifyIcon;
+using H.NotifyIcon.Core;
 using StickyNotes.Infrastructure;
 using StickyNotes.Messages;
 
 namespace StickyNotes.Services;
 
 /// <summary>
-/// Windows 系统任务栏托盘图标服务 (Shell_NotifyIcon)
+/// Windows 系统任务栏托盘图标服务 (基于成熟的 H.NotifyIcon.Wpf 控件)
 /// </summary>
 public sealed class TrayIconService : IDisposable
 {
-    private const int TrayIconId = 1001;
-
     private readonly WindowManager _windowManager;
     private readonly SettingsService _settingsService;
-    private HwndSource? _hwndSource;
-    private NativeMethods.NOTIFYICONDATA _nid;
-    private IntPtr _hIcon = IntPtr.Zero;
-    private ContextMenu? _contextMenu;
-    private bool _isCreated;
+    private TaskbarIcon? _taskbarIcon;
+    private HwndSource? _activationHelperHwnd;
+    private bool _isDisposed;
 
     public TrayIconService(WindowManager windowManager, SettingsService settingsService)
     {
@@ -32,105 +31,179 @@ public sealed class TrayIconService : IDisposable
     }
 
     /// <summary>
-    /// 初始化托盘图标及右键上下文菜单
+    /// 供单元测试或诊断查看底层 TaskbarIcon 实例
+    /// </summary>
+    internal TaskbarIcon? TaskbarIconForTest => _taskbarIcon;
+
+    /// <summary>
+    /// 初始化托盘图标及右键上下文菜单与第二实例唤醒消息监听
     /// </summary>
     public void Initialize()
     {
-        if (_isCreated) return;
-
-        var parameters = new HwndSourceParameters("StickyNotes_TrayHelper")
-        {
-            WindowStyle = 0,
-            Width = 0,
-            Height = 0
-        };
-
-        _hwndSource = new HwndSource(parameters);
-        _hwndSource.AddHook(HwndHook);
-
-        // 加载应用程序原生图标 (从当前可执行文件或标准应用程序图标提取)
-        try
-        {
-            var exePath = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(exePath))
-            {
-                _hIcon = NativeMethods.ExtractIcon(IntPtr.Zero, exePath, 0);
-            }
-            if (_hIcon == IntPtr.Zero || _hIcon == (IntPtr)1)
-            {
-                _hIcon = NativeMethods.LoadIcon(IntPtr.Zero, NativeMethods.IDI_APPLICATION);
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn($"[TrayIconService] 提取托盘图标失败: {ex.Message}", ex);
-            _hIcon = NativeMethods.LoadIcon(IntPtr.Zero, NativeMethods.IDI_APPLICATION);
-        }
-
-        _nid = new NativeMethods.NOTIFYICONDATA
-        {
-            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.NOTIFYICONDATA>(),
-            hWnd = _hwndSource.Handle,
-            uID = TrayIconId,
-            uFlags = NativeMethods.TrayNotifyIconFlags,
-            uCallbackMessage = NativeMethods.WM_TRAYICON,
-            hIcon = _hIcon,
-            szTip = "StickyNotes 便签"
-        };
-
-        CreateIcon();
-        CreateContextMenu();
-    }
-
-    /// <summary>
-    /// 向 Shell 注册（或重新注册）托盘图标，并声明使用版本 4 行为。
-    /// </summary>
-    private void CreateIcon()
-    {
-        if (_hwndSource == null)
+        if (_taskbarIcon != null || _isDisposed)
         {
             return;
         }
 
-        bool ok = NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_ADD, ref _nid);
-        if (ok)
+        // 1. 初始化第二实例唤醒监听窗口（解耦的轻量级消息接收器）
+        // 主列表窗口在 --minimized/--autostart 启动路径下不会被 Show()，没有 HWND；
+        // 因此常驻后台必须有专用的 HwndSource 监听 WM_ACTIVATE_INSTANCE。
+        InitActivationHelperWindow();
+
+        // 2. 初始化 TaskbarIcon 托盘控件
+        _taskbarIcon = new TaskbarIcon
         {
-            _isCreated = true;
+            ToolTipText = "StickyNotes 便签",
+            MenuActivation = PopupActivationMode.RightClick,
+            LeftClickCommand = new RelayCommand(OpenOrActivateListWindow),
+            DoubleClickCommand = new RelayCommand(OpenOrActivateListWindow)
+        };
 
-            // 必须紧接着调用 NIM_SETVERSION：否则图标停留在"旧式"形态，
-            // 不参与 Win10/11 图标区布局（原 F-P1-8 第二宗毛病）。
-            var versionData = _nid;
-            versionData.uTimeoutOrVersion = NativeMethods.NOTIFYICON_VERSION_4;
-            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_SETVERSION, ref versionData);
+        // 加载应用程序托盘图标
+        LoadTrayIcon(_taskbarIcon);
 
-            AppLog.Info("[TrayIconService] 系统托盘图标创建成功（版本 4）");
+        // 3. 构建上下文菜单
+        _taskbarIcon.ContextMenu = CreateContextMenu();
+
+        // 强制创建托盘图标（通过 C# 编程式构造时调用）
+        try
+        {
+            _taskbarIcon.ForceCreate();
+            AppLog.Info("[TrayIconService] 系统托盘图标创建成功 (Hardcodet.NotifyIcon.Wpf)");
         }
-        else
+        catch (Exception ex)
         {
-            _isCreated = false;
-            AppLog.Warn("[TrayIconService] 系统托盘图标创建失败");
+            AppLog.Warn($"[TrayIconService] ForceCreate 托盘图标异常: {ex.Message}", ex);
         }
     }
 
-    private void CreateContextMenu()
+
+    private void LoadTrayIcon(TaskbarIcon taskbarIcon)
     {
-        _contextMenu = new ContextMenu();
+        // 优先使用 Pack URI 加载嵌入的 AppIcon.ico 资源
+        try
+        {
+            var uri = new Uri("pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico", UriKind.Absolute);
+            var streamInfo = Application.GetResourceStream(uri);
+            if (streamInfo != null)
+            {
+                using (streamInfo.Stream)
+                {
+                    taskbarIcon.Icon = new System.Drawing.Icon(streamInfo.Stream);
+                    return;
+                }
+            }
+
+            taskbarIcon.IconSource = new BitmapImage(uri);
+            return;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"[TrayIconService] Pack URI 加载托盘图标失败: {ex.Message}，尝试本地文件降级", ex);
+        }
+
+        // 降级尝试：从当前程序运行目录或 Assets 目录直接读取
+        try
+        {
+            var candidates = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"),
+                Path.Combine(AppContext.BaseDirectory, "Resources", "App.ico"),
+                Path.Combine(AppContext.BaseDirectory, "AppIcon.ico")
+            };
+
+            foreach (var path in candidates)
+            {
+                if (File.Exists(path))
+                {
+                    using var fs = File.OpenRead(path);
+                    taskbarIcon.Icon = new System.Drawing.Icon(fs);
+                    return;
+                }
+            }
+        }
+        catch (Exception fallbackEx)
+        {
+            AppLog.Warn($"[TrayIconService] 本地文件降级加载托盘图标失败: {fallbackEx.Message}", fallbackEx);
+        }
+    }
+
+    private void InitActivationHelperWindow()
+    {
+        if (_activationHelperHwnd != null)
+        {
+            return;
+        }
+
+        try
+        {
+            var parameters = new HwndSourceParameters("StickyNotes_InstanceHelper")
+            {
+                WindowStyle = 0,
+                Width = 0,
+                Height = 0
+            };
+
+            _activationHelperHwnd = new HwndSource(parameters);
+            _activationHelperHwnd.AddHook(ActivationHook);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[TrayIconService] 创建第二实例激活监听窗口失败: {ex.Message}", ex);
+        }
+    }
+
+    private IntPtr ActivationHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // 实例唤醒消息必须由本窗口兜底处理（而不是只挂主列表窗口）：
+        // 主列表窗口在 --minimized/--autostart 启动路径下不会被 Show()，
+        // 因此它此刻没有 HWND，消息永远收不到；本隐藏 helper 窗口则始终存在。
+        if (msg == NativeMethods.WM_ACTIVATE_INSTANCE && NativeMethods.WM_ACTIVATE_INSTANCE != 0)
+        {
+            handled = true;
+
+            var dispatcher = _activationHelperHwnd?.Dispatcher;
+            if (dispatcher != null)
+            {
+                dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Normal,
+                    new Action(OpenOrActivateListWindow));
+            }
+            else
+            {
+                OpenOrActivateListWindow();
+            }
+
+            return IntPtr.Zero;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    private void OpenOrActivateListWindow()
+    {
+        _windowManager.OpenOrActivateNotesListWindow();
+    }
+
+    private ContextMenu CreateContextMenu()
+    {
+        var contextMenu = new ContextMenu();
 
         var itemNew = new MenuItem { Header = "新建便签 (Ctrl+N)" };
         itemNew.Click += (_, _) => WeakReferenceMessenger.Default.Send(new NewNoteRequestedMessage());
-        _contextMenu.Items.Add(itemNew);
+        contextMenu.Items.Add(itemNew);
 
         var itemList = new MenuItem { Header = "便签列表 (Ctrl+H)" };
         itemList.Click += (_, _) => WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
-        _contextMenu.Items.Add(itemList);
+        contextMenu.Items.Add(itemList);
 
-        _contextMenu.Items.Add(new Separator());
+        contextMenu.Items.Add(new Separator());
 
         var itemSettings = new MenuItem { Header = "设置中心" };
         itemSettings.Click += (_, _) => _windowManager.OpenOrActivateSettingsWindow();
-        _contextMenu.Items.Add(itemSettings);
+        contextMenu.Items.Add(itemSettings);
 
-        _contextMenu.Items.Add(new Separator());
+        contextMenu.Items.Add(new Separator());
 
         var itemExit = new MenuItem { Header = "退出便签" };
         itemExit.Click += (_, _) =>
@@ -144,136 +217,31 @@ public sealed class TrayIconService : IDisposable
             // 最后关闭应用。
             Application.Current.Shutdown();
         };
-        _contextMenu.Items.Add(itemExit);
-    }
+        contextMenu.Items.Add(itemExit);
 
-    private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        // explorer.exe 重启 / 崩溃恢复后会广播 TaskbarCreated：此时旧图标已失效，
-        // 必须重建，否则托盘图标永久消失（原 F-P1-8 第一宗毛病）。
-        if (msg == NativeMethods.WM_TASKBAR_CREATED && NativeMethods.WM_TASKBAR_CREATED != 0)
-        {
-            AppLog.Info("[TrayIconService] 检测到任务栏重建（explorer 重启），正在恢复托盘图标");
-            _isCreated = false;
-            CreateIcon();
-            handled = true;
-            return IntPtr.Zero;
-        }
-
-        if (msg == NativeMethods.WM_TRAYICON)
-        {
-            // 注意：v4 下事件码位于 LOWORD(lParam)，图标 ID 在 HIWORD(lParam)。
-            // 早期版本曾把 lParam 整体当事件码比较，导致所有分支都不命中、托盘完全无响应。
-            var kind = NativeMethods.ClassifyTrayEvent(lParam.ToInt32());
-
-            switch (kind)
-            {
-                case NativeMethods.TrayEventKind.OpenList:
-                    WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
-                    handled = true;
-                    break;
-
-                case NativeMethods.TrayEventKind.ShowContextMenu:
-                    AppLog.Info("[TrayIconService] 托盘右键菜单弹出");
-                    ShowContextMenu();
-                    handled = true;
-                    break;
-            }
-
-            return IntPtr.Zero;
-        }
-
-        // 实例唤醒消息必须由**本窗口**兜底处理（而不是只挂主列表窗口）：
-        // 主列表窗口在 --minimized/--autostart 启动路径下不会被 Show()，
-        // 因此它此刻没有 HWND，消息永远收不到；托盘隐藏窗口则始终存在。
-        // 早期实现只在 NotesListWindow.WndProc 里处理该消息，导致「已有实例在运行，
-        // 但再双击 exe 毫无反应」（用户必须结束进程再重开）。
-        if (msg == NativeMethods.WM_ACTIVATE_INSTANCE && NativeMethods.WM_ACTIVATE_INSTANCE != 0)
-        {
-            handled = true;
-
-            // 用 BeginInvoke 让消息处理即刻返回，避免在窗口过程里同步做窗口激活造成重入
-            var dispatcher = _hwndSource?.Dispatcher;
-            if (dispatcher != null)
-            {
-                dispatcher.BeginInvoke(
-                    System.Windows.Threading.DispatcherPriority.Normal,
-                    new Action(() => _windowManager.OpenOrActivateNotesListWindow()));
-            }
-            else
-            {
-                _windowManager.OpenOrActivateNotesListWindow();
-            }
-
-            return IntPtr.Zero;
-        }
-
-        return IntPtr.Zero;
-    }
-
-    private void ShowContextMenu()
-    {
-        if (_contextMenu == null || _hwndSource == null) return;
-
-        NativeMethods.SetForegroundWindow(_hwndSource.Handle);
-
-        // 用 MousePoint：该模式由 WPF 在**屏幕 DIP 空间**内部处理定位，天然正确。
-        // 禁止改用 Placement=AbsolutePoint + 消息里的 wParam 锚点坐标：
-        // 那是**物理像素**，而 WPF 的 HorizontalOffset/VerticalOffset 单位是 **DIP**。
-        // 在 150% 缩放下把物理值当 DIP 用会放大 1.5 倍，坐标越界后被 WPF 钳到屏幕边缘，
-        // 表现为「右键菜单跑到屏幕右下角、远离托盘图标」。
-        _contextMenu.Closed -= ContextMenu_Closed;
-        _contextMenu.Closed += ContextMenu_Closed;
-
-        _contextMenu.Placement = PlacementMode.MousePoint;
-        _contextMenu.IsOpen = true;
-    }
-
-    /// <summary>
-    /// 菜单关闭后的收尾。这三步都不能省，各有明确用途：
-    /// <list type="number">
-    ///   <item>
-    ///     <c>WM_CANCELMODE</c>：告知 Shell「菜单模式已结束」。缺了它，Shell 会认为
-    ///     仍有菜单处于激活态，转而去接管通知区域焦点 —— 表现为「点完菜单项后，
-    ///     任务栏『显示隐藏的图标』按钮被白框圈住并获得焦点」。
-    ///   </item>
-    ///   <item>
-    ///     <c>WM_NULL</c>：让托盘隐藏窗口干净地交还前台身份（经典托盘菜单收尾写法）。
-    ///   </item>
-    ///   <item>
-    ///     **禁止调用 <c>NIM_SETFOCUS</c>**：实测它会把**整个任务栏</c>（Shell_TrayWnd）
-    ///     变成前台窗口，使通知区域图标出现焦点白框与提示文字。
-    ///   </item>
-    /// </list>
-    /// </summary>
-    private void ContextMenu_Closed(object? sender, RoutedEventArgs e)
-    {
-        var handle = _hwndSource?.Handle ?? IntPtr.Zero;
-        if (handle == IntPtr.Zero)
-        {
-            return;
-        }
-
-        NativeMethods.PostMessage(handle, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-        NativeMethods.PostMessage(handle, NativeMethods.WM_NULL, IntPtr.Zero, IntPtr.Zero);
+        return contextMenu;
     }
 
     public void Dispose()
     {
-        if (_isCreated)
+        if (_isDisposed)
         {
-            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_DELETE, ref _nid);
-            _isCreated = false;
+            return;
         }
 
-        if (_hIcon != IntPtr.Zero)
+        _isDisposed = true;
+
+        if (_taskbarIcon != null)
         {
-            NativeMethods.DestroyIcon(_hIcon);
-            _hIcon = IntPtr.Zero;
+            _taskbarIcon.Dispose();
+            _taskbarIcon = null;
         }
 
-        _hwndSource?.RemoveHook(HwndHook);
-        _hwndSource?.Dispose();
-        _hwndSource = null;
+        if (_activationHelperHwnd != null)
+        {
+            _activationHelperHwnd.RemoveHook(ActivationHook);
+            _activationHelperHwnd.Dispose();
+            _activationHelperHwnd = null;
+        }
     }
 }

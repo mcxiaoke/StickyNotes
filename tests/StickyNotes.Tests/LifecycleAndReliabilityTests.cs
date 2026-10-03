@@ -848,11 +848,11 @@ public class LifecycleAndReliabilityTests
 
     /// <summary>
     /// 回归（用户实际反馈）：点托盘菜单项后，任务栏「展开图标」被白框框住并提示
-    /// 「显示隐藏的图标」。原因是菜单关闭时调用了 <c>NIM_SETFOCUS</c>，
-    /// 它把**整个任务栏**（Shell_TrayWnd）变成前台窗口，Windows 随之给通知区域
-    /// 获得焦点的图标绘制焦点框并弹出提示。
-    /// 因此托盘代码中**不得**调用 NIM_SETFOCUS；也不得为其重新引入菜单 Closed 订阅。
-    /// 本用例通过源码扫描锁定该约束（防止再次"顺带"加回来）。
+    /// 「显示隐藏的图标」。原因是旧版手写代码在菜单关闭时误用了 <c>NIM_SETFOCUS</c>，
+    /// 它把整个任务栏变成前台窗口。
+    /// 现已彻底改用成熟的 H.NotifyIcon.Wpf（TaskbarIcon）托管控件，
+    /// 彻底消除手写 Shell_NotifyIcon 与 NIM_SETFOCUS 焦点争抢。
+    /// 本用例锁定：托盘服务使用 TaskbarIcon，不调用 NIM_SETFOCUS，也不包含原生 Shell_NotifyIcon。
     /// </summary>
     [TestMethod]
     public void F_P1_8_TrayIcon_DoesNotStealFocusFromShell()
@@ -881,15 +881,13 @@ public class LifecycleAndReliabilityTests
             "TrayIconService 不得调用 NIM_SETFOCUS：它会把焦点交给整个任务栏，"
             + "导致通知区域图标出现焦点白框与「显示隐藏的图标」提示");
 
-        // 正确的收尾必须保留：WM_CANCELMODE 告知 Shell 菜单模式已结束（缺失会导致
-        // Shell 接管通知区域焦点），WM_NULL 干净交还前台身份。
         Assert.IsTrue(
-            effectiveCode.Contains("WM_CANCELMODE", StringComparison.Ordinal),
-            "菜单关闭后必须发 WM_CANCELMODE，否则 Shell 认为菜单仍激活并接管通知区域焦点");
+            effectiveCode.Contains("TaskbarIcon", StringComparison.Ordinal),
+            "TrayIconService 必须使用成熟的 TaskbarIcon 控件接管托盘");
 
-        Assert.IsTrue(
-            effectiveCode.Contains("WM_NULL", StringComparison.Ordinal),
-            "菜单关闭后必须发 WM_NULL 交还前台身份（经典托盘菜单收尾）");
+        Assert.IsFalse(
+            effectiveCode.Contains("Shell_NotifyIcon", StringComparison.Ordinal),
+            "TrayIconService 不得再使用手写的 Shell_NotifyIcon Win32 调用，由 TaskbarIcon 统一托管");
     }
 
     /// <summary>
@@ -900,6 +898,32 @@ public class LifecycleAndReliabilityTests
     public void F_P1_8_ContextMenuClose_PostsCancelMode()
     {
         Assert.AreEqual(0x001F, NativeMethods.WM_CANCELMODE, "WM_CANCELMODE 常量必须为 0x001F");
+    }
+
+    /// <summary>
+    /// 验证现代 H.NotifyIcon.TaskbarIcon 托盘服务初始化与释放行为：
+    /// 确保 TaskbarIcon 正确配置 ToolTipText、MenuActivation、ContextMenu，且 Dispose 时安全清理。
+    /// </summary>
+    [TestMethod]
+    public void H_NotifyIcon_InitializesProperly_AndDisposesCleanly()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            TestEnvironment.EnsureApplication();
+            var windowManager = new WindowManager(
+                TestEnvironment.CreateWindowManagerContainer(_repository), _repository);
+            var trayService = new TrayIconService(windowManager, TestEnvironment.CreateSettingsService());
+
+            trayService.Initialize();
+            var icon = trayService.TaskbarIconForTest;
+            Assert.IsNotNull(icon, "初始化后 TaskbarIcon 实例不得为空");
+            Assert.AreEqual("StickyNotes 便签", icon.ToolTipText);
+            Assert.IsNotNull(icon.ContextMenu, "托盘右键上下文菜单必须已挂载");
+            Assert.IsTrue(icon.ContextMenu.Items.Count >= 5, "托盘菜单项必须包含新建、列表、设置、退出等基本项");
+
+            trayService.Dispose();
+            Assert.IsNull(trayService.TaskbarIconForTest, "Dispose 后 TaskbarIcon 必须被置空并释放");
+        });
     }
 
     /// <summary>
