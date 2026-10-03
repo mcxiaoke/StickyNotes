@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using StickyNotes.Infrastructure;
 using StickyNotes.Models;
 
 namespace StickyNotes.Services;
@@ -19,6 +20,8 @@ public sealed class SearchService : ISearchService
         var trimmed = keyword.Trim();
         var tokens = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0) return Array.Empty<SearchHit>();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         // 紧凑词（去除所有空格，用于“open router”匹配“openrouter”等连写场景）
         var compact = string.Concat(tokens);
@@ -158,6 +161,14 @@ public sealed class SearchService : ISearchService
                 Lines: snippetLines,
                 TotalMatches: Math.Max(1, totalMatches)
             ));
+        }
+
+        sw.Stop();
+        // 仅在耗时明显偏高（>100ms）时记录，避免高频搜索把日志刷爆；
+        // 阈值参考产品文档 NFR（<30ms 达标）与本报告实测的退化拐点。
+        if (sw.ElapsedMilliseconds >= 100)
+        {
+            AppLog.Warn($"[SearchService] 搜索耗时偏高 {sw.ElapsedMilliseconds}ms（词=\"{trimmed}\"，扫描便签数={results.Count}，命中={results.Count}）");
         }
 
         return results;

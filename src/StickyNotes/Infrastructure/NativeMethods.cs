@@ -157,9 +157,11 @@ internal static class NativeMethods
             using var proc = System.Diagnostics.Process.GetCurrentProcess();
             EmptyWorkingSet(proc.Handle);
         }
-        catch
+        catch (Exception ex)
         {
-            // 内存修剪属辅助优化机制，静默容错，不阻断正常业务
+            // NativeMethods 会在 Program.Main 极早期被调用，此时 AppPaths 可能尚未就绪，
+            // 因此使用 Debug 输出而非 AppLog，避免日志系统自身的初始化副作用。
+            System.Diagnostics.Debug.WriteLine($"[NativeMethods] 修剪工作集失败: {ex.Message}");
         }
     }
     #endregion

@@ -111,9 +111,10 @@ public partial class NoteWindow : Window
                 double targetOffset = EditorTextBox.VerticalOffset + charRect.Top - (EditorTextBox.ActualHeight / 2.5);
                 EditorTextBox.ScrollToVerticalOffset(Math.Max(0, targetOffset));
             }
-            catch
+            catch (Exception ex)
             {
-                // 兜底调用系统按行滚动
+                // 兜底调用系统按行滚动（记录原因便于排查跳转定位异常）
+                AppLog.Warn($"[NoteWindow] 精确跳行定位失败，降级为按行滚动: {ex.Message}");
                 int visualLine = EditorTextBox.GetLineIndexFromCharacterIndex(safeStart);
                 EditorTextBox.ScrollToLine(visualLine);
             }

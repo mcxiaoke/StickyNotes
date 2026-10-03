@@ -250,6 +250,8 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
         RefreshFilterNotification();
         UpdateSearchSnapshot();
 
+        AppLog.Info($"[NotesListViewModel] 已新建便签 {newNote.Id}，位置=({left:F0},{top:F0})");
+
         _windowManager.OpenOrActivateNote(newNote, window =>
         {
             window.Focus();
@@ -284,6 +286,8 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
         HasNoNotes = Notes.Count == 0;
         RefreshFilterNotification();
         UpdateSearchSnapshot();
+
+        AppLog.Info($"[NotesListViewModel] 已归档便签 {note.Id}");
 
         WeakReferenceMessenger.Default.Send(new NoteArchivedMessage(note.Id));
 

@@ -176,11 +176,13 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_pinService == null || IsPinEnabled) return;
 
+        AppLog.Info("[SettingsViewModel] 用户请求启用 PIN 锁定");
         if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Enable))
         {
             // 用户重新设置成功后，清除「数据已损坏」告警标记
             _settingsService.Settings.PinDataCorrupted = false;
             RefreshPinState();
+            AppLog.Info("[SettingsViewModel] PIN 锁定已启用");
         }
     }
 
@@ -189,9 +191,11 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_pinService == null || !IsPinEnabled) return;
 
+        AppLog.Info("[SettingsViewModel] 用户请求修改 PIN");
         if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Change))
         {
             RefreshPinState();
+            AppLog.Info("[SettingsViewModel] PIN 已修改");
         }
     }
 
@@ -200,9 +204,11 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_pinService == null || !IsPinEnabled) return;
 
+        AppLog.Info("[SettingsViewModel] 用户请求清除 PIN");
         if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Disable))
         {
             RefreshPinState();
+            AppLog.Info("[SettingsViewModel] PIN 已清除，锁定失效");
         }
     }
 

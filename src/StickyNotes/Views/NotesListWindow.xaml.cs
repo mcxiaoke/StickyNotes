@@ -620,7 +620,10 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"[NotesListWindow] 保存主窗口位置失败: {ex.Message}", ex);
+        }
     }
 
     private void SaveWindowPlacement()
@@ -639,6 +642,9 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 System.IO.File.WriteAllText(StickyNotes.Infrastructure.AppPaths.WindowConfigPath, json);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"[NotesListWindow] 保存主窗口位置失败: {ex.Message}", ex);
+        }
     }
 }
