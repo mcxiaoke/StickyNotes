@@ -137,23 +137,52 @@ public partial class App : Application
         // 8. 保持后台托盘常驻模式
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // 9. 初始化系统托盘图标与全局快捷键
-        _serviceProvider.GetRequiredService<TrayIconService>().Initialize();
-        _serviceProvider.GetRequiredService<HotKeyService>().Initialize();
-
-        // 10. 管理中心主窗口呈现（若携带 --autostart 或 --minimized 参数，则保持托盘静默不弹窗）
-        var mainWindow = _serviceProvider.GetRequiredService<NotesListWindow>();
-        MainWindow = mainWindow;
-
-        bool startMinimized = e.Args.Any(a => a.Equals("--autostart", StringComparison.OrdinalIgnoreCase) || 
-                                              a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
-        if (!startMinimized)
+        // 9. 初始化系统托盘图标与全局快捷键。
+        // 此段必须有独立兜底：托盘/热键初始化若抛异常而无人捕获，会经
+        // DispatcherUnhandledException 走崩溃路径，用户只看到一次无提示的闪退（N-10）。
+        // 两者失败都不影响核心功能，降级为「无托盘 / 无热键」继续运行并记录日志。
+        try
         {
-            mainWindow.Show();
+            _serviceProvider.GetRequiredService<TrayIconService>().Initialize();
         }
-        else
+        catch (Exception ex)
         {
-            AppLog.Info("[App] 检测到自启动参数 (--autostart/--minimized)，主窗口保持在后台托盘");
+            AppLog.Error($"[App] 托盘图标初始化失败（应用继续运行，仅缺少托盘图标）: {ex.Message}", ex);
+        }
+
+        try
+        {
+            _serviceProvider.GetRequiredService<HotKeyService>().Initialize();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[App] 全局热键初始化失败（应用继续运行，仅缺少全局热键）: {ex.Message}", ex);
+        }
+
+        // 10. 管理中心主窗口呈现（若携带 --autostart 或 --minimized 参数，则保持托盘静默不弹窗）。
+        // 主窗口是最后的功能底线：创建/呈现失败时给出可读提示并安全退出，而非无声闪退。
+        try
+        {
+            var mainWindow = _serviceProvider.GetRequiredService<NotesListWindow>();
+            MainWindow = mainWindow;
+
+            bool startMinimized = e.Args.Any(a => a.Equals("--autostart", StringComparison.OrdinalIgnoreCase) ||
+                                                  a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+            if (!startMinimized)
+            {
+                mainWindow.Show();
+            }
+            else
+            {
+                AppLog.Info("[App] 检测到自启动参数 (--autostart/--minimized)，主窗口保持在后台托盘");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[App] 主窗口创建/呈现失败，启动中止: {ex.Message}", ex);
+            ShowStartupFailure(AppPaths.DatabasePath, ex);
+            Shutdown(1);
+            return;
         }
 
         // 11. 启动初始化稳定后，延迟 5 秒修剪冷启动与 JIT 编译产生的瞬时工作集页面
@@ -170,7 +199,7 @@ public partial class App : Application
     /// </summary>
     private static bool IsRecoverable(Exception ex) => ex switch
     {
-        // 纯 UI/输入层的瞬时异常，不涉及数据与资源状态
+        // UI/标记层异常：出现即意味着界面状态已不可信，一律放行走崩溃路径，绝不吞掉
         InvalidOperationException => false,
         NotSupportedException => false,
         System.Windows.Markup.XamlParseException => false,
