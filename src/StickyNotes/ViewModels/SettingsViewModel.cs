@@ -117,6 +117,9 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>PIN 锁定是否生效</summary>
     public bool IsPinEnabled => _pinService?.IsPinEnabled ?? false;
 
+    /// <summary>PIN 配置数据是否已损坏（settings.json 中的盐/哈希缺失或非法，锁定已被强制失效）</summary>
+    public bool IsPinDataCorrupted => _settingsService.Settings.PinDataCorrupted;
+
     /// <summary>PIN 锁定状态描述文字</summary>
     public string PinStatusText => IsPinEnabled ? "已启用，打开列表与归档时需输入 PIN" : "未启用";
 
@@ -165,6 +168,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsPinEnabled));
         OnPropertyChanged(nameof(PinStatusText));
+        OnPropertyChanged(nameof(IsPinDataCorrupted));
     }
 
     [RelayCommand]
@@ -174,6 +178,8 @@ public partial class SettingsViewModel : ObservableObject
 
         if (PinSetupDialog.Execute(GetOwnerWindow(), _pinService, PinDialogMode.Enable))
         {
+            // 用户重新设置成功后，清除「数据已损坏」告警标记
+            _settingsService.Settings.PinDataCorrupted = false;
             RefreshPinState();
         }
     }

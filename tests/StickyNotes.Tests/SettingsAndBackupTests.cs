@@ -119,4 +119,90 @@ public class SettingsAndBackupTests
         Assert.AreEqual(NoteColor.Purple, restoredArchived[0].Color);
         Assert.IsTrue(restoredArchived[0].IsDeleted);
     }
+
+    /// <summary>
+    /// F-P1-6 验证：settings.json 采用原子写入 —— 写入后目标文件内容完整可解析，
+    /// 且首次写入不残留 .tmp；覆盖写入时生成 .bak 备份。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_6_SaveSettings_WritesAtomically()
+    {
+        var settingsPath = Path.Combine(_testDir, "settings.json");
+
+        var service = new SettingsService(settingsPath);
+        service.SetEditorFontSize(18.0);
+
+        Assert.IsTrue(File.Exists(settingsPath), "目标设置文件必须存在");
+        Assert.IsFalse(File.Exists(settingsPath + ".tmp"), "写入完成后不得残留 .tmp 临时文件");
+
+        // 内容必须是完整可解析的 JSON（原子替换的核心保证）
+        var json = File.ReadAllText(settingsPath);
+        var parsed = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json);
+        Assert.IsNotNull(parsed, "设置文件必须是合法的完整 JSON");
+        Assert.AreEqual(18.0, parsed.EditorFontSize, 0.001, "写入的设置值必须正确落盘");
+
+        // 第二次覆盖写入应生成 .bak 备份
+        service.SetEditorFontSize(20.0);
+        Assert.IsTrue(File.Exists(settingsPath + ".bak"), "覆盖写入时应保留 .bak 备份");
+
+        var reparsed = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(settingsPath));
+        Assert.IsNotNull(reparsed);
+        Assert.AreEqual(20.0, reparsed.EditorFontSize, 0.001);
+    }
+
+    /// <summary>
+    /// F-P1-6 验证：settings.json 中 PinEnabled 为真但盐/哈希缺失时，
+    /// 不得静默降级为「无 PIN」，必须标记 PinDataCorrupted 以便向用户显式告警。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_6_CorruptedPinData_IsFlaggedInsteadOfSilentlyDisabled()
+    {
+        var settingsPath = Path.Combine(_testDir, "settings_corrupt.json");
+        File.WriteAllText(settingsPath, """
+            {
+              "EditorFontSize": 14.0,
+              "MinimizeToTrayOnClose": true,
+              "EnableGlobalHotKeys": true,
+              "StartMinimized": true,
+              "PinEnabled": true,
+              "PinSalt": "",
+              "PinHash": "",
+              "ListAutoCloseMinutes": 10
+            }
+            """);
+
+        var service = new SettingsService(settingsPath);
+
+        Assert.IsFalse(service.Settings.PinEnabled, "损坏的 PIN 数据必须使锁定失效，避免假安全");
+        Assert.IsTrue(service.Settings.PinDataCorrupted, "必须标记 PinDataCorrupted 以便 UI 显式告警用户");
+
+        // PinService 层面也必须一致：不生效
+        var pinService = new PinService(service);
+        Assert.IsFalse(pinService.IsPinEnabled, "PIN 数据损坏时 IsPinEnabled 必须为 false");
+        Assert.IsFalse(pinService.IsPinSet, "盐/哈希缺失时 IsPinSet 必须为 false");
+    }
+
+    /// <summary>
+    /// F-P1-6 验证：settings.json 解析失败时应回退到 .bak，而不是丢失用户的全部设置
+    /// </summary>
+    [TestMethod]
+    public void F_P1_6_BrokenSettingsJson_FallsBackToBackup()
+    {
+        var settingsPath = Path.Combine(_testDir, "settings_recover.json");
+
+        // 先用正常流程生成一份有效设置与 .bak
+        var service = new SettingsService(settingsPath);
+        service.SetEditorFontSize(16.0);
+        service.SetEditorFontSize(22.0);
+        Assert.IsTrue(File.Exists(settingsPath + ".bak"), "前置条件：应存在 .bak 备份");
+
+        // 主文件被写坏（模拟断电留下半截 JSON）
+        File.WriteAllText(settingsPath, "{ \"EditorFontSize\": 16.0, \"PinEn");
+
+        var recovered = new SettingsService(settingsPath);
+        Assert.IsNotNull(recovered.Settings);
+        // 从 .bak 恢复后应拿到备份时刻的合法字号，而不是静默回退默认值 14.0
+        Assert.AreEqual(16.0, recovered.Settings.EditorFontSize, 0.001,
+            "主文件损坏时应从 .bak 恢复用户设置，而非静默回退默认值");
+    }
 }
