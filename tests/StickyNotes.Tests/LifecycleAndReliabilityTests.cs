@@ -46,10 +46,14 @@ public class LifecycleAndReliabilityTests
     }
 
     /// <summary>
-    /// P0-1 验证：应用退出时统一同步窗口状态，桌面上打开的便签必须保持 IsOpen = true 且记住坐标尺寸
+    /// P0-1 验证（重写版）：严格复刻真实 WPF 退出时序 ——
+    /// 「Shutdown 调用 → 全部窗口 Closed 触发 → Exit/OnExit → 退出持久化」。
+    /// 关键点：窗口 Closed 时 IsShuttingDown 仍为 false（原缺陷的触发条件），
+    /// 因此必须靠「创建时写 true / 用户主动关闭写 false」的单一写入口来保证退出后 IsOpen 仍为 true。
+    /// 另：仅「桌面置顶」便签记忆精确坐标，其余便签不写坐标。
     /// </summary>
     [TestMethod]
-    public void P0_1_Shutdown_PreservesActiveWindowsIsOpenTrueAndCoordinates()
+    public void P0_1_Shutdown_PreservesIsOpenTrue_AndOnlyPinnedRemembersPlacement()
     {
         TestEnvironment.RunInSta(() =>
         {
@@ -61,20 +65,24 @@ public class LifecycleAndReliabilityTests
 
             var wm = new WindowManager(sp, _repository);
 
-            var note1 = new Note
+            // 便签 1：桌面置顶（应记忆坐标）
+            var pinned = new Note
             {
                 Id = Guid.NewGuid(),
-                Content = "贴纸 1",
+                Content = "置顶贴纸",
+                AlwaysOnTop = true,
                 WindowX = 200,
                 WindowY = 220,
                 WindowWidth = 320,
                 WindowHeight = 360,
                 IsOpen = true
             };
-            var note2 = new Note
+            // 便签 2：普通（不记忆坐标）
+            var plain = new Note
             {
                 Id = Guid.NewGuid(),
-                Content = "贴纸 2",
+                Content = "普通贴纸",
+                AlwaysOnTop = false,
                 WindowX = 550,
                 WindowY = 220,
                 WindowWidth = 320,
@@ -82,44 +90,55 @@ public class LifecycleAndReliabilityTests
                 IsOpen = true
             };
 
-            _repository.SaveAsync(note1).GetAwaiter().GetResult();
-            _repository.SaveAsync(note2).GetAwaiter().GetResult();
+            _repository.SaveAsync(pinned).GetAwaiter().GetResult();
+            _repository.SaveAsync(plain).GetAwaiter().GetResult();
 
-            var win1 = wm.OpenOrActivateNote(note1);
-            var win2 = wm.OpenOrActivateNote(note2);
+            var win1 = wm.OpenOrActivateNote(pinned);
+            var win2 = wm.OpenOrActivateNote(plain);
 
-            // 用户调整了 win1 坐标
+            // 用户调整了置顶便签坐标
             win1.Left = 260;
             win1.Top = 280;
 
-            // 模拟应用退出（调用 WindowManager.PersistActiveWindowsBoundsOnExit）
-            wm.PersistActiveWindowsBoundsOnExit();
+            // === 严格复刻真实时序 ===
+            // 1) 退出发起：先持久化置顶便签坐标（窗口字典仍完整），再声明退出
+            //    （真实路径为 TrayIconService → WindowManager.BeginShutdownAndPersistPinnedPlacement）
+            wm.BeginShutdownAndPersistPinnedPlacement();
 
-            // 模拟 WPF 连带关闭窗口
+            // 2) Shutdown() 关闭全部窗口：此刻已标记退出，关闭回调不得回写 IsOpen=false
             win1.Close();
             win2.Close();
 
-            // 给予短暂 Dispatcher 消息循环以便 Closed 异步处理完成
             System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
 
-            // 重新从数据库读取验证
-            var after1 = _repository.GetByIdAsync(note1.Id).GetAwaiter().GetResult();
-            var after2 = _repository.GetByIdAsync(note2.Id).GetAwaiter().GetResult();
+            // 3) 退出阶段：仅置顶便签记忆坐标，且不修改 IsOpen
+            wm.PersistPinnedWindowsPlacementOnExit();
 
-            Assert.IsNotNull(after1);
-            Assert.IsNotNull(after2);
-            Assert.IsTrue(after1.IsOpen, "退出后便签 1 必须保持 IsOpen = true 以便重启恢复");
-            Assert.IsTrue(after2.IsOpen, "退出后便签 2 必须保持 IsOpen = true 以便重启恢复");
-            Assert.AreEqual(260, after1.WindowX, 1.0, "便签 1 调整后的 X 坐标应被正确持久化");
-            Assert.AreEqual(280, after1.WindowY, 1.0, "便签 1 调整后的 Y 坐标应被正确持久化");
+            var afterPinned = _repository.GetByIdAsync(pinned.Id).GetAwaiter().GetResult();
+            var afterPlain = _repository.GetByIdAsync(plain.Id).GetAwaiter().GetResult();
+
+            Assert.IsNotNull(afterPinned);
+            Assert.IsNotNull(afterPlain);
+
+            // 核心断言：退出后两张便签都必须保持 IsOpen = true，重启才能恢复
+            Assert.IsTrue(afterPinned.IsOpen, "退出后置顶便签必须保持 IsOpen = true 以便重启恢复");
+            Assert.IsTrue(afterPlain.IsOpen, "退出后普通便签必须保持 IsOpen = true 以便重启恢复");
+
+            // 置顶便签记忆精确坐标
+            Assert.AreEqual(260, afterPinned.WindowX, 1.0, "置顶便签调整后的 X 坐标应被正确持久化");
+            Assert.AreEqual(280, afterPinned.WindowY, 1.0, "置顶便签调整后的 Y 坐标应被正确持久化");
+
+            // 普通便签不记忆坐标（仍是原始值，未被退出流程改写）
+            Assert.AreEqual(550, afterPlain.WindowX, 1.0, "非置顶便签不应被记忆坐标");
+            Assert.AreEqual(220, afterPlain.WindowY, 1.0, "非置顶便签不应被记忆坐标");
         });
     }
 
     /// <summary>
-    /// P0-1 伴随验证：用户在运行期主动关闭某张便签时，该便签的 IsOpen 必须置为 false
+    /// P0-1 伴随验证（重写版）：用户主动关闭便签时 IsOpen 必须置为 false —— 这是 IsOpen 的另一个单一写入口
     /// </summary>
     [TestMethod]
-    public void P0_1_NormalClose_SetsIsOpenFalse()
+    public void P0_1_NormalClose_SetsIsOpenFalse_EvenWithoutShutdownFlag()
     {
         TestEnvironment.RunInSta(() =>
         {
@@ -131,25 +150,56 @@ public class LifecycleAndReliabilityTests
 
             var wm = new WindowManager(sp, _repository);
 
-            var note = new Note
-            {
-                Id = Guid.NewGuid(),
-                Content = "即将被用户主动关闭的贴纸",
-                IsOpen = true
-            };
+            var note = new Note { Id = Guid.NewGuid(), Content = "用户主动关闭的贴纸", IsOpen = true };
             _repository.SaveAsync(note).GetAwaiter().GetResult();
 
             var win = wm.OpenOrActivateNote(note);
-
-            // 用户主动关闭贴纸
             win.Close();
 
-            // 给予短暂 Dispatcher 消息循环以便 Closed 异步处理完成
             System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
 
             var after = _repository.GetByIdAsync(note.Id).GetAwaiter().GetResult();
             Assert.IsNotNull(after);
             Assert.IsFalse(after.IsOpen, "用户主动关闭的贴纸在数据库中 IsOpen 必须为 false");
+        });
+    }
+
+    /// <summary>
+    /// F-P1-4 验证：窗口关闭时必须**同步阻塞**完成刷盘。
+    /// 旧实现用 `async void` 处理器 + await，实测续体在「全部窗口 Closed → App.OnExit → 进程结束」
+    /// 的时序下不会执行；本测试在关闭后不泵任何消息循环，立即断言数据库已落盘，
+    /// 以此证明刷盘发生在 Closing 的同步段内。
+    /// </summary>
+    [TestMethod]
+    public void F_P1_4_Closing_FlushesSynchronously_BeforeReturning()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<INoteRepository>(_repository);
+            services.AddSingleton(new AutoSaveCoordinator(_repository));
+            services.AddTransient<NoteViewModel>();
+            var sp = services.BuildServiceProvider();
+            var wm = new WindowManager(sp, _repository);
+
+            var note = new Note { Id = Guid.NewGuid(), Content = "初始内容", IsOpen = true };
+            _repository.SaveAsync(note).GetAwaiter().GetResult();
+
+            var win = wm.OpenOrActivateNote(note);
+            var vm = win.ViewModel;
+
+            // 输入新内容（进入防抖待写状态，尚未落盘）
+            vm.Content = "关闭前最后一段输入";
+            Assert.AreEqual(NoteSaveState.Pending, vm.SaveState, "前置条件：应存在未落盘改动");
+
+            // 关闭窗口 —— 关键：关闭后不泵 Dispatcher，直接读库
+            win.Close();
+
+            var after = _repository.GetByIdAsync(note.Id).GetAwaiter().GetResult();
+            Assert.IsNotNull(after);
+            Assert.AreEqual("关闭前最后一段输入", after.Content,
+                "Closing 必须同步完成刷盘：关闭返回后数据库就应是最新内容，不能依赖 await 续体");
+            Assert.AreEqual(NoteSaveState.Saved, vm.SaveState, "同步刷盘成功后状态应为 Saved");
         });
     }
 

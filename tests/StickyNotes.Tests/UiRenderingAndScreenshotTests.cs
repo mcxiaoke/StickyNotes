@@ -97,6 +97,19 @@ public class UiRenderingAndScreenshotTests
             }
             return Task.CompletedTask;
         }
+
+        public Task UpdateWindowPlacementAsync(Guid id, double x, double y, double width, double height, CancellationToken cancellationToken = default)
+        {
+            var note = Notes.FirstOrDefault(n => n.Id == id);
+            if (note != null)
+            {
+                note.WindowX = x;
+                note.WindowY = y;
+                note.WindowWidth = width;
+                note.WindowHeight = height;
+            }
+            return Task.CompletedTask;
+        }
     }
 
     [TestMethod]

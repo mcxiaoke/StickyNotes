@@ -19,4 +19,9 @@ public interface INoteRepository
     Task HardDeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task ClearAllArchivedAsync(CancellationToken cancellationToken = default);
     Task UpdateWindowBoundsAsync(Guid id, double x, double y, double width, double height, bool isOpen, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 仅更新窗口坐标与尺寸，不触碰 IsOpen
+    /// </summary>
+    Task UpdateWindowPlacementAsync(Guid id, double x, double y, double width, double height, CancellationToken cancellationToken = default);
 }

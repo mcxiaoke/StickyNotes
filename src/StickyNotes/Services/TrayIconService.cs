@@ -116,6 +116,13 @@ public sealed class TrayIconService : IDisposable
         itemExit.Click += (_, _) =>
         {
             AppLog.Info("[TrayIconService] 用户点击托盘退出菜单");
+
+            // 退出顺序至关重要（F-P0-1）：先持久化置顶便签坐标 —— 此刻窗口字典仍完整；
+            // 若拖到 App.OnExit 才做，Shutdown() 已先关闭全部窗口并清空字典，坐标将永久丢失。
+            // 随后标记退出，使窗口 Closed 回调跳过 IsOpen=false 回写。
+            _windowManager.BeginShutdownAndPersistPinnedPlacement();
+
+            // 最后关闭应用。
             Application.Current.Shutdown();
         };
         _contextMenu.Items.Add(itemExit);

@@ -93,9 +93,15 @@ public sealed class WindowManager
                 });
             }
 
-            // 若应用处于正常退出/关机流程中，跳过此处的 isOpen: false 回写
-            // （退出状态与真实坐标已在 PersistActiveWindowsBoundsOnExit 中可靠持久化，保持 IsOpen = true）
-            if (App.IsShuttingDown || _isShuttingDown) return;
+            // 只有用户主动关闭才把 IsOpen 置为 false（IsOpen 的唯一写入点之一）。
+            // 应用退出流程由 App.IsShuttingDown / _isShuttingDown 提前拦截，绝不在此回写，
+            // 因为 WPF 的事件顺序是「全部窗口 Closed → App.OnExit」，退出时若在此写入 false，
+            // 便签将在下次启动时全部消失（原 F-P0-1）。
+            if (App.IsShuttingDown || _isShuttingDown)
+            {
+                AppLog.Info($"[WindowManager] 便签 {note.Id} 窗口随应用退出关闭，保持 IsOpen 不变");
+                return;
+            }
 
             try
             {
@@ -107,6 +113,8 @@ public sealed class WindowManager
                     window.ActualHeight > 0 ? window.ActualHeight : window.Height,
                     isOpen: false
                 );
+
+                AppLog.Info($"[WindowManager] 用户关闭便签 {note.Id}，已写入 IsOpen=false");
             }
             catch (Exception ex)
             {
@@ -115,35 +123,111 @@ public sealed class WindowManager
         };
 
         _activeNoteWindows[note.Id] = window;
+
+        // IsOpen 的唯一写入入口之一：窗口创建（打开）时写 true。
+        // 与「用户主动关闭写 false」配对，彻底摆脱对退出事件顺序的依赖（原 F-P0-1 的根因）。
+        if (!note.IsOpen)
+        {
+            note.IsOpen = true;
+        }
+
         window.Show();
+
+        // 打开即落库，确保异常退出（崩溃/断电）后重启仍能恢复这张贴纸
+        _ = PersistIsOpenOnOpenAsync(note);
+
         onReady?.Invoke(window);
         return window;
     }
 
     /// <summary>
-    /// 应用退出时统一同步当前所有敞开便签的物理坐标、尺寸并保持 IsOpen = true
+    /// 便签窗口打开时写入 IsOpen = true（不阻塞 UI，失败仅记日志）
     /// </summary>
-    public void PersistActiveWindowsBoundsOnExit()
+    private async Task PersistIsOpenOnOpenAsync(Note note)
+    {
+        try
+        {
+            await _repository.UpdateWindowBoundsAsync(
+                note.Id,
+                note.WindowX,
+                note.WindowY,
+                note.WindowWidth,
+                note.WindowHeight,
+                isOpen: true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"[WindowManager] 打开便签 {note.Id} 时写入 IsOpen=true 失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 声明应用进入退出流程：此后窗口 Closed 回调不再回写 IsOpen=false。
+    /// 与 App.BeginShutdown 同步语义，便于在退出发起时立即生效（而非等到 OnExit —— 那时窗口已全部关闭）。
+    /// 注意：调用本方法后窗口字典可能在随后的窗口关闭中被清空，
+    /// 因此若还需持久化坐标，请优先使用 <see cref="BeginShutdownAndPersistPinnedPlacement"/>。
+    /// </summary>
+    public void BeginShutdown()
     {
         _isShuttingDown = true;
-        foreach (var (id, win) in _activeNoteWindows)
+        AppLog.Info("[WindowManager] 已标记退出流程，后续窗口关闭不再回写 IsOpen=false");
+    }
+
+    /// <summary>
+    /// 原子化的退出前处理：先持久化「桌面置顶」便签坐标（此刻窗口字典仍完整），
+    /// 再标记退出使后续窗口关闭跳过 IsOpen=false 回写。
+    /// 顺序不可颠倒 —— WPF 的 Shutdown() 会先关闭全部窗口并触发 Closed 回调，
+    /// 之后才轮到 App.OnExit；若在 OnExit 才保存坐标，字典已空、坐标永久丢失（F-P0-1 的完整根因）。
+    /// 本方法幂等，可重复调用。
+    /// </summary>
+    public void BeginShutdownAndPersistPinnedPlacement()
+    {
+        if (!_isShuttingDown)
+        {
+            PersistPinnedWindowsPlacementOnExit();
+            BeginShutdown();
+        }
+    }
+
+    /// <summary>
+    /// 应用退出时持久化「仅桌面置顶便签」的精确坐标与尺寸。
+    /// 设计说明（对齐 F-P0-1 的用户决策）：
+    ///  - 只有 AlwaysOnTop（便签窗口右上角图钉 / Ctrl+P）的便签才需要记忆窗口位置；
+    ///  - 其余便签下次启动仍会重新打开（IsOpen 由创建/关闭两个入口维护），但走层叠自动排布，不再记忆精确坐标；
+    ///  - 本方法**不再写 IsOpen**，从根上消除「退出时补写」与 WPF 事件顺序（全部窗口 Closed → App.OnExit）的耦合。
+    /// </summary>
+    public void PersistPinnedWindowsPlacementOnExit()
+    {
+        _isShuttingDown = true;
+
+        // 先做快照：窗口 Closed 回调可能在遍历期间修改字典
+        var snapshot = _activeNoteWindows.ToList();
+        int persisted = 0;
+
+        foreach (var (id, win) in snapshot)
         {
             try
             {
-                _repository.UpdateWindowBoundsAsync(
+                var note = win.ViewModel.Note;
+                if (!note.AlwaysOnTop) continue;
+
+                _repository.UpdateWindowPlacementAsync(
                     id,
                     win.Left,
                     win.Top,
                     win.ActualWidth > 0 ? win.ActualWidth : win.Width,
-                    win.ActualHeight > 0 ? win.ActualHeight : win.Height,
-                    isOpen: true
+                    win.ActualHeight > 0 ? win.ActualHeight : win.Height
                 ).ConfigureAwait(false).GetAwaiter().GetResult();
+
+                persisted++;
             }
             catch (Exception ex)
             {
-                AppLog.Warn($"[WindowManager] 退出持久化便签窗口 {id} 坐标失败: {ex.Message}", ex);
+                AppLog.Warn($"[WindowManager] 退出持久化置顶便签窗口 {id} 坐标失败: {ex.Message}", ex);
             }
         }
+
+        AppLog.Info($"[WindowManager] 退出流程完成：活动窗口 {snapshot.Count} 张，其中桌面置顶并已记忆坐标 {persisted} 张");
     }
 
     private NotesListWindow? _notesListWindow;
