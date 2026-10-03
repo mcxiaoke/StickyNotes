@@ -81,6 +81,18 @@ public sealed class WindowManager
         {
             _activeNoteWindows.Remove(note.Id);
 
+            // 当便签窗口关闭时，若主列表窗口可见，则主动通知其恢复最佳键盘焦点
+            if (_notesListWindow != null && _notesListWindow.IsVisible)
+            {
+                _ = _notesListWindow.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, () =>
+                {
+                    if (_notesListWindow.IsVisible)
+                    {
+                        _notesListWindow.RestoreOptimalFocus();
+                    }
+                });
+            }
+
             // 若应用处于正常退出/关机流程中，跳过此处的 isOpen: false 回写
             // （退出状态与真实坐标已在 PersistActiveWindowsBoundsOnExit 中可靠持久化，保持 IsOpen = true）
             if (App.IsShuttingDown || _isShuttingDown) return;

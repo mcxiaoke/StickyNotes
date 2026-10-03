@@ -73,7 +73,17 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             }
         };
 
-        Activated += (_, _) => _idleCloseTimer.Stop();
+        Activated += (_, _) =>
+        {
+            _idleCloseTimer.Stop();
+            if (PinOverlay.IsLocked) return;
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            {
+                if (PinOverlay.IsLocked) return;
+                RestoreOptimalFocus();
+            });
+        };
+
         Deactivated += (_, _) =>
         {
             var minutes = _settingsService?.ListAutoCloseMinutes ?? 0;
@@ -134,31 +144,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             });
         });
 
-        KeyDown += (s, e) =>
-        {
-            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
-            {
-                if (e.Key == Key.N)
-                {
-                    ViewModel.NewNoteCommand.Execute(null);
-                    e.Handled = true;
-                }
-                else if (e.Key == Key.F)
-                {
-                    SearchBox.Focus();
-                    SearchBox.SelectAll();
-                    e.Handled = true;
-                }
-            }
-            else if (e.Key == Key.Escape)
-            {
-                if (ViewModel.IsSearching)
-                {
-                    ViewModel.SearchText = string.Empty;
-                    e.Handled = true;
-                }
-            }
-        };
+        PreviewKeyDown += NotesListWindow_PreviewKeyDown;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -213,10 +199,15 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             if (btn != null) return;
         }
 
-        // 双击打开新窗口
-        if (e.ClickCount == 2 && sender is FrameworkElement { DataContext: Note note })
+        if (sender is FrameworkElement { DataContext: Note note })
         {
-            ViewModel.OpenNoteCommand.Execute(note);
+            NotesListBox.SelectedItem = note;
+        }
+
+        // 双击打开新窗口
+        if (e.ClickCount == 2 && sender is FrameworkElement { DataContext: Note note2 })
+        {
+            ViewModel.OpenNoteCommand.Execute(note2);
             e.Handled = true;
         }
     }
@@ -284,7 +275,10 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             {
                 if (ViewModel.SearchResults.Count > 0)
                 {
-                    FocusListBoxItem(SearchHitsListBox, 0);
+                    int targetIndex = (SearchHitsListBox.SelectedIndex >= 0 && SearchHitsListBox.SelectedIndex < ViewModel.SearchResults.Count)
+                        ? SearchHitsListBox.SelectedIndex
+                        : 0;
+                    FocusListBoxItem(SearchHitsListBox, targetIndex);
                     e.Handled = true;
                 }
             }
@@ -292,7 +286,10 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             {
                 if (ViewModel.FilteredNotes.Any())
                 {
-                    FocusListBoxItem(NotesListBox, 0);
+                    int targetIndex = (NotesListBox.SelectedIndex >= 0 && NotesListBox.SelectedIndex < NotesListBox.Items.Count)
+                        ? NotesListBox.SelectedIndex
+                        : 0;
+                    FocusListBoxItem(NotesListBox, targetIndex);
                     e.Handled = true;
                 }
             }
@@ -302,13 +299,19 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             if (ViewModel.IsSearching && ViewModel.SearchResults.Count > 0)
             {
                 var hit = (SearchHitsListBox.SelectedItem as SearchHit) ?? ViewModel.SearchResults[0];
+                SearchHitsListBox.SelectedItem = hit;
                 ViewModel.JumpToSearchHitCommand.Execute(hit);
                 e.Handled = true;
             }
-            else if (!ViewModel.IsSearching && NotesListBox.SelectedItem is Note selectedNote)
+            else if (!ViewModel.IsSearching && ViewModel.FilteredNotes.Any())
             {
-                ViewModel.OpenNoteCommand.Execute(selectedNote);
-                e.Handled = true;
+                var note = (NotesListBox.SelectedItem as Note) ?? ViewModel.FilteredNotes.FirstOrDefault();
+                if (note != null)
+                {
+                    NotesListBox.SelectedItem = note;
+                    ViewModel.OpenNoteCommand.Execute(note);
+                    e.Handled = true;
+                }
             }
         }
         else if (e.Key == Key.Escape)
@@ -324,11 +327,185 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     // 兼容历史调用
     internal void SearchBox_KeyDown(object sender, KeyEventArgs e) => SearchBox_PreviewKeyDown(sender, e);
 
+    /// <summary>
+    /// 当窗口激活或从外部便签页返回时，智能恢复最佳键盘交互焦点
+    /// </summary>
+    public void RestoreOptimalFocus()
+    {
+        if (PinOverlay.IsLocked) return;
+
+        // 如果用户已经在可编辑文本框内，不夺取输入焦点
+        if (Keyboard.FocusedElement is System.Windows.Controls.TextBox ||
+            Keyboard.FocusedElement is System.Windows.Controls.PasswordBox)
+        {
+            return;
+        }
+
+        if (ViewModel.IsSearching)
+        {
+            if (SearchHitsListBox.SelectedIndex >= 0 && SearchHitsListBox.SelectedIndex < ViewModel.SearchResults.Count)
+            {
+                FocusListBoxItem(SearchHitsListBox, SearchHitsListBox.SelectedIndex);
+            }
+            else if (ViewModel.SearchResults.Count > 0)
+            {
+                FocusListBoxItem(SearchHitsListBox, 0);
+            }
+            else
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+            }
+        }
+        else
+        {
+            if (NotesListBox.SelectedIndex >= 0 && NotesListBox.SelectedIndex < NotesListBox.Items.Count)
+            {
+                FocusListBoxItem(NotesListBox, NotesListBox.SelectedIndex);
+            }
+            else if (NotesListBox.Items.Count > 0)
+            {
+                FocusListBoxItem(NotesListBox, 0);
+            }
+            else
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+            }
+        }
+    }
+
+    private void NotesListWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (e.Key == Key.N)
+            {
+                ViewModel.NewNoteCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.F)
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // 若当前焦点在可编辑文本框（如搜索框、PIN密码框），由控件各自处理，不在此全局拦截
+        if (Keyboard.FocusedElement is System.Windows.Controls.TextBox ||
+            Keyboard.FocusedElement is System.Windows.Controls.PasswordBox)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Down)
+        {
+            if (ViewModel.IsSearching)
+            {
+                if (SearchHitsListBox.Items.Count > 0)
+                {
+                    int next = SearchHitsListBox.SelectedIndex < 0
+                        ? 0
+                        : Math.Min(SearchHitsListBox.SelectedIndex + 1, SearchHitsListBox.Items.Count - 1);
+                    FocusListBoxItem(SearchHitsListBox, next);
+                    e.Handled = true;
+                }
+            }
+            else
+            {
+                if (NotesListBox.Items.Count > 0)
+                {
+                    int next = NotesListBox.SelectedIndex < 0
+                        ? 0
+                        : Math.Min(NotesListBox.SelectedIndex + 1, NotesListBox.Items.Count - 1);
+                    FocusListBoxItem(NotesListBox, next);
+                    e.Handled = true;
+                }
+            }
+        }
+        else if (e.Key == Key.Up)
+        {
+            if (ViewModel.IsSearching)
+            {
+                if (SearchHitsListBox.SelectedIndex > 0)
+                {
+                    FocusListBoxItem(SearchHitsListBox, SearchHitsListBox.SelectedIndex - 1);
+                    e.Handled = true;
+                }
+                else
+                {
+                    SearchBox.Focus();
+                    SearchBox.SelectAll();
+                    e.Handled = true;
+                }
+            }
+            else
+            {
+                if (NotesListBox.SelectedIndex > 0)
+                {
+                    FocusListBoxItem(NotesListBox, NotesListBox.SelectedIndex - 1);
+                    e.Handled = true;
+                }
+                else
+                {
+                    SearchBox.Focus();
+                    SearchBox.SelectAll();
+                    e.Handled = true;
+                }
+            }
+        }
+        else if (e.Key == Key.Enter)
+        {
+            if (ViewModel.IsSearching)
+            {
+                if (SearchHitsListBox.SelectedItem is SearchHit hit)
+                {
+                    ViewModel.JumpToSearchHitCommand.Execute(hit);
+                    e.Handled = true;
+                }
+                else if (ViewModel.SearchResults.Count > 0)
+                {
+                    var hit0 = ViewModel.SearchResults[0];
+                    SearchHitsListBox.SelectedItem = hit0;
+                    ViewModel.JumpToSearchHitCommand.Execute(hit0);
+                    e.Handled = true;
+                }
+            }
+            else
+            {
+                if (NotesListBox.SelectedItem is Note note)
+                {
+                    ViewModel.OpenNoteCommand.Execute(note);
+                    e.Handled = true;
+                }
+                else if (ViewModel.FilteredNotes.FirstOrDefault() is Note note0)
+                {
+                    NotesListBox.SelectedItem = note0;
+                    ViewModel.OpenNoteCommand.Execute(note0);
+                    e.Handled = true;
+                }
+            }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            if (ViewModel.IsSearching)
+            {
+                ViewModel.SearchText = string.Empty;
+                SearchBox.Focus();
+                e.Handled = true;
+            }
+        }
+    }
+
     internal void FocusListBoxItem(ListBox listBox, int index)
     {
-        if (index < 0) return;
+        if (index < 0 || listBox.Items.Count == 0) return;
+        index = Math.Clamp(index, 0, listBox.Items.Count - 1);
         listBox.SelectedIndex = index;
-        listBox.Focus();
+
         if (listBox.ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem item)
         {
             item.Focus();
@@ -336,16 +513,26 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         }
         else
         {
-            if (listBox.Items.Count > index)
-            {
-                listBox.ScrollIntoView(listBox.Items[index]);
-            }
+            listBox.ScrollIntoView(listBox.Items[index]);
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
             {
                 var container = listBox.ItemContainerGenerator.ContainerFromIndex(index) as ListBoxItem;
                 container?.Focus();
                 container?.BringIntoView();
             });
+        }
+    }
+
+    private void ListBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is ListBox listBox && e.NewFocus == listBox)
+        {
+            int target = listBox.SelectedIndex >= 0 ? listBox.SelectedIndex : 0;
+            if (listBox.Items.Count > target)
+            {
+                FocusListBoxItem(listBox, target);
+                e.Handled = true;
+            }
         }
     }
 
@@ -389,6 +576,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender is FrameworkElement { DataContext: SearchHit hit })
         {
+            SearchHitsListBox.SelectedItem = hit;
             ViewModel.JumpToSearchHitCommand.Execute(hit);
         }
     }
