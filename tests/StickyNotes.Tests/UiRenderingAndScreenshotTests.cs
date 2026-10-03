@@ -149,7 +149,7 @@ public class UiRenderingAndScreenshotTests
             };
 
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -192,7 +192,7 @@ public class UiRenderingAndScreenshotTests
             };
 
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -226,7 +226,7 @@ public class UiRenderingAndScreenshotTests
                 }
             };
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -261,7 +261,7 @@ public class UiRenderingAndScreenshotTests
                 }
             };
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -321,7 +321,7 @@ public class UiRenderingAndScreenshotTests
                 Notes = { note1, note2 }
             };
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -373,7 +373,7 @@ public class UiRenderingAndScreenshotTests
                 }
             };
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -432,7 +432,7 @@ public class UiRenderingAndScreenshotTests
         {
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator();
-            var vm = new NoteViewModel(repo, coordinator);
+            var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
 
             var note = new Note
             {
@@ -460,7 +460,7 @@ public class UiRenderingAndScreenshotTests
         {
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator();
-            var vm = new NoteViewModel(repo, coordinator);
+            var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
 
             var note = new Note
             {
@@ -488,7 +488,7 @@ public class UiRenderingAndScreenshotTests
         {
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator();
-            var vm = new NoteViewModel(repo, coordinator);
+            var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
 
             var longText = """
                 长篇工作纪要与备忘录
@@ -551,7 +551,7 @@ public class UiRenderingAndScreenshotTests
         {
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator();
-            var vm = new NoteViewModel(repo, coordinator);
+            var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
 
             var note = new Note
             {
@@ -580,7 +580,7 @@ public class UiRenderingAndScreenshotTests
             var note2 = new Note { Id = Guid.NewGuid(), Content = "普通便签 B", IsPinned = false, UpdatedAt = DateTime.UtcNow.AddMinutes(-5) };
             var repo = new FakeNoteRepository { Notes = { note1, note2 } };
             var searchService = new SearchService();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
             var vm = new NotesListViewModel(repo, searchService, windowManager);
             vm.LoadNotesAsync().GetAwaiter().GetResult();
 
@@ -601,7 +601,7 @@ public class UiRenderingAndScreenshotTests
         {
             var repo = new FakeNoteRepository();
             var coordinator = new AutoSaveCoordinator();
-            var vm = new NoteViewModel(repo, coordinator);
+            var vm = new NoteViewModel(repo, coordinator, TestEnvironment.CreateSettingsService());
 
             var note = new Note
             {
@@ -631,7 +631,7 @@ public class UiRenderingAndScreenshotTests
         TestEnvironment.RunInSta(() =>
         {
             var repo = new FakeNoteRepository();
-            var windowManager = new WindowManager(null!, repo);
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
 
             // 第一次计算位置
             var (x1, y1) = windowManager.CalculateSmartRightPlacement(380, 420);
@@ -698,12 +698,67 @@ public class UiRenderingAndScreenshotTests
         TestEnvironment.RunInSta(() =>
         {
             var repo = new FakeNoteRepository();
-            var settingsService = new SettingsService();
+            var settingsService = TestEnvironment.CreateSettingsService();
             var backupService = new ExportImportService(repo);
             var vm = new SettingsViewModel(settingsService, backupService);
 
             var win = new SettingsWindow(vm);
             TestEnvironment.SaveWindowSnapshot(win, 480, 680, "09_SettingsWindow.png");
+        });
+    }
+
+    [TestMethod]
+    public void NotesListWindow_LockedByPin_ShouldBlockCtrlNAndCtrlF()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var note = new Note { Id = Guid.NewGuid(), Content = "锁定时不应被快捷键触达的便签", Color = NoteColor.Yellow };
+            var repo = new FakeNoteRepository { Notes = { note } };
+            var searchService = new SearchService();
+            var windowManager = new WindowManager(TestEnvironment.CreateWindowManagerContainer(repo), repo);
+            var vm = new NotesListViewModel(repo, searchService, windowManager);
+            vm.LoadNotesAsync().GetAwaiter().GetResult();
+
+            var win = new NotesListWindow(vm);
+            win.Show();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Loaded,
+                (Action)(() => { frame.Continue = false; }));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+
+            var dummySource = new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero);
+
+            // 1. 未锁定时 Ctrl+N 应正常放行（对照组，防止修复过度拦截）
+            var ctrlNUnlocked = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.N)
+            {
+                RoutedEvent = Keyboard.PreviewKeyDownEvent
+            };
+            win.RaiseWindowPreviewKeyDown(ctrlNUnlocked, ModifierKeys.Control);
+            Assert.IsTrue(ctrlNUnlocked.Handled, "未锁定时 Ctrl+N 应被处理（打开新建便签）");
+
+            // 2. 锁定后 Ctrl+N 必须被拦截，且不得打开明文便签窗口
+            win.IsPinLockedForTest = true;
+            int windowsBefore = Application.Current?.Windows.Count ?? 0;
+
+            var ctrlNLocked = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.N)
+            {
+                RoutedEvent = Keyboard.PreviewKeyDownEvent
+            };
+            win.RaiseWindowPreviewKeyDown(ctrlNLocked, ModifierKeys.Control);
+            Assert.IsFalse(ctrlNLocked.Handled, "锁定态 Ctrl+N 不应被处理（应整体拦截并放行给遮罩之外的路径）");
+            Assert.AreEqual(windowsBefore, Application.Current?.Windows.Count ?? 0, "锁定态 Ctrl+N 不得新建任何窗口");
+
+            // 3. 锁定后 Ctrl+F 不得把焦点交给遮罩后方的搜索框
+            var ctrlFLocked = new KeyEventArgs(Keyboard.PrimaryDevice, dummySource, 0, Key.F)
+            {
+                RoutedEvent = Keyboard.PreviewKeyDownEvent
+            };
+            win.RaiseWindowPreviewKeyDown(ctrlFLocked, ModifierKeys.Control);
+            Assert.IsFalse(ctrlFLocked.Handled, "锁定态 Ctrl+F 不应被处理");
+            Assert.IsTrue(win.IsPinLockedForTest, "锁定态不得因快捷键而解锁");
+
+            dummySource.Dispose();
         });
     }
 }
