@@ -65,33 +65,41 @@ public sealed class ExportImportService
     /// </summary>
     public async Task<int> ExportNotesAsync(string targetFilePath, CancellationToken cancellationToken = default)
     {
-        var allNotes = await _repository.GetAllAsync(cancellationToken);
-        var package = new NoteBackupPackage
+        try
         {
-            App = "StickyNotes",
-            Version = "1.0",
-            ExportedAt = DateTime.UtcNow,
-            TotalCount = allNotes.Count,
-            Notes = allNotes.Select(n => new NoteBackupItem
+            var allNotes = await _repository.GetAllAsync(cancellationToken);
+            var package = new NoteBackupPackage
             {
-                Id = n.Id,
-                Content = n.Content,
-                Color = n.Color,
-                IsPinned = n.IsPinned,
-                IsDeleted = n.IsDeleted,
-                WindowX = n.WindowX,
-                WindowY = n.WindowY,
-                WindowWidth = n.WindowWidth,
-                WindowHeight = n.WindowHeight,
-                CreatedAt = n.CreatedAt,
-                UpdatedAt = n.UpdatedAt
-            }).ToList()
-        };
+                App = "StickyNotes",
+                Version = "1.0",
+                ExportedAt = DateTime.UtcNow,
+                TotalCount = allNotes.Count,
+                Notes = allNotes.Select(n => new NoteBackupItem
+                {
+                    Id = n.Id,
+                    Content = n.Content,
+                    Color = n.Color,
+                    IsPinned = n.IsPinned,
+                    IsDeleted = n.IsDeleted,
+                    WindowX = n.WindowX,
+                    WindowY = n.WindowY,
+                    WindowWidth = n.WindowWidth,
+                    WindowHeight = n.WindowHeight,
+                    CreatedAt = n.CreatedAt,
+                    UpdatedAt = n.UpdatedAt
+                }).ToList()
+            };
 
-        var json = JsonSerializer.Serialize(package, JsonOptions);
-        await File.WriteAllTextAsync(targetFilePath, json, cancellationToken);
-        AppLog.Info($"[ExportImportService] 成功导出 {package.TotalCount} 条便签至 {targetFilePath}");
-        return package.TotalCount;
+            var json = JsonSerializer.Serialize(package, JsonOptions);
+            await File.WriteAllTextAsync(targetFilePath, json, cancellationToken);
+            AppLog.Info($"[ExportImportService] 成功导出 {package.TotalCount} 条便签至 {targetFilePath}");
+            return package.TotalCount;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[ExportImportService] 导出便签失败 (目标: {targetFilePath}): {ex.Message}", ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -124,9 +132,10 @@ public sealed class ExportImportService
                 items = package.Notes;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 降级尝试顶层数组反序列化
+            // 降级尝试顶层数组反序列化（非静默：记录以便排查格式不符的备份文件）
+            AppLog.Warn($"[ExportImportService] 备份文件不符合 NoteBackupPackage 容器格式，降级按顶层数组解析: {ex.Message}");
         }
 
         if (items == null)
@@ -135,7 +144,10 @@ public sealed class ExportImportService
         }
 
         if (items == null || items.Count == 0)
+        {
+            AppLog.Warn($"[ExportImportService] 导入文件未解析出任何便签记录: {sourceFilePath}");
             return new ImportResult(0, 0, 0);
+        }
 
         var toSave = new List<Note>();
         int skippedCount = 0;

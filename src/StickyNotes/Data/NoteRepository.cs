@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using StickyNotes.Infrastructure;
 using StickyNotes.Models;
 
 namespace StickyNotes.Data;
@@ -105,8 +106,7 @@ public sealed class NoteRepository : INoteRepository
     }
 
     public async Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        await using var connection = await OpenConnectionAsync(cancellationToken);
+    {        await using var connection = await OpenConnectionAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -168,6 +168,7 @@ public sealed class NoteRepository : INoteRepository
     {
         var noteList = notes.ToList();
         if (noteList.Count == 0) return;
+        AppLog.Info($"[NoteRepository] 批量写入 {noteList.Count} 条便签（单事务）");
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
@@ -228,7 +229,8 @@ public sealed class NoteRepository : INoteRepository
         command.Parameters.AddWithValue("$id", id.ToString());
         command.Parameters.AddWithValue("$updatedAt", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        AppLog.Info($"[NoteRepository] 归档便签 {id}，受影响行数={affected}");
     }
 
     public async Task RestoreNoteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -244,7 +246,8 @@ public sealed class NoteRepository : INoteRepository
         command.Parameters.AddWithValue("$id", id.ToString());
         command.Parameters.AddWithValue("$updatedAt", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        AppLog.Info($"[NoteRepository] 恢复便签 {id}，受影响行数={affected}");
     }
 
     public async Task HardDeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -255,7 +258,8 @@ public sealed class NoteRepository : INoteRepository
         command.CommandText = "DELETE FROM Notes WHERE Id = $id;";
         command.Parameters.AddWithValue("$id", id.ToString());
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        AppLog.Warn($"[NoteRepository] 彻底删除便签 {id}（不可撤销），受影响行数={affected}");
     }
 
     public async Task ClearAllArchivedAsync(CancellationToken cancellationToken = default)
@@ -265,7 +269,8 @@ public sealed class NoteRepository : INoteRepository
         await using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM Notes WHERE IsDeleted = 1;";
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        AppLog.Warn($"[NoteRepository] 清空全部已归档便签（不可撤销），受影响行数={affected}");
     }
 
     public async Task UpdateWindowBoundsAsync(
@@ -330,7 +335,12 @@ public sealed class NoteRepository : INoteRepository
         command.Parameters.AddWithValue("$width", width);
         command.Parameters.AddWithValue("$height", height);
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (affected == 0)
+        {
+            // 目标行不存在通常意味着便签已被删除，需要留痕以便排查「坐标丢失」
+            AppLog.Warn($"[NoteRepository] 保存窗口坐标未命中任何行，便签 {id} 可能已不存在");
+        }
     }
 
     private static void BindNoteParameters(SqliteCommand command, Note note)

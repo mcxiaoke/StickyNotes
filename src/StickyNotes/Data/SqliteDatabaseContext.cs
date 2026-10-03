@@ -69,6 +69,8 @@ public sealed class SqliteDatabaseContext
                 "请升级应用，或从 backups/ 目录恢复一份匹配的备份后再启动。");
         }
 
+        AppLog.Info($"[SqliteDatabaseContext] 数据库初始化开始：当前版本 v{currentVersion}，目标版本 v{TargetSchemaVersion}");
+
         // 3. 执行 V1 初始建表迁移
         // 注意「每个版本只做自己的事」：V1 建表**只包含** v1 时期的列（LiveNote 相关），
         // IsPinnedInList / AlwaysOnTop 两列属于 V2，必须由 V2 迁移通过 ALTER 添加。
@@ -147,6 +149,10 @@ public sealed class SqliteDatabaseContext
             }
 
             AppLog.Info($"[SqliteDatabaseContext] 已应用 Schema V2（IsPinnedInList 补齐={!existingColumns.Contains("IsPinnedInList")}, AlwaysOnTop 补齐={!existingColumns.Contains("AlwaysOnTop")}）");
+        }
+        else
+        {
+            AppLog.Info($"[SqliteDatabaseContext] 数据库架构已是最新 (v{currentVersion})，无需迁移");
         }
     }
 

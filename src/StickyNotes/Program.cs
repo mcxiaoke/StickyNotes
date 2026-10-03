@@ -33,11 +33,19 @@ public static class Program
             app.InitializeComponent();
             app.Run();
         }
+        catch (Exception ex)
+        {
+            // 启动阶段的最外层兜底：此处 AppLog 可能尚不可用，双通道输出保证痕迹不丢
+            AppLog.Error($"[Program] 应用启动/运行阶段未捕获异常: {ex.Message}", ex);
+            System.Diagnostics.Debug.WriteLine($"[Program] 应用启动/运行阶段未捕获异常: {ex}");
+            throw;
+        }
         finally
         {
             _instanceMutex?.ReleaseMutex();
             _instanceMutex?.Dispose();
             _instanceMutex = null;
+            AppLog.Info("[Program] 单实例互斥量已释放，进程退出");
         }
     }
 }

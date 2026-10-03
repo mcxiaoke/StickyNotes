@@ -39,7 +39,10 @@ public static class BackupService
             {
                 foreach (var oldFile in backupFiles.Skip(14))
                 {
-                    try { oldFile.Delete(); } catch { }
+                foreach (var oldBackup in backupFiles.Skip(14))
+                {
+                    try { oldBackup.Delete(); } catch (Exception ex) { AppLog.Warn($"[BackupService] 清理过期备份 {oldBackup.Name} 失败: {ex.Message}", ex); }
+                }
                 }
             }
         }
@@ -57,7 +60,7 @@ public static class BackupService
         var tempFile = targetBackupFilePath + ".tmp";
         if (File.Exists(tempFile))
         {
-            try { File.Delete(tempFile); } catch { }
+            try { File.Delete(tempFile); } catch (Exception ex) { AppLog.Warn($"[BackupService] 清理遗留临时备份文件失败: {ex.Message}", ex); }
         }
 
         var builder = new SqliteConnectionStringBuilder

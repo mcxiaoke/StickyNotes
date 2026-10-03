@@ -85,9 +85,11 @@ public static class AppPaths
                 return envDir;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 环境变量读取异常时静默降级
+            // 注意：此处**不能**使用 AppLog —— AppLog 写日志需要 AppPaths.LogsDirectory，
+            // 会回调 DataDirectory/ResolveDataDirectory 形成递归。改用 Debug 输出保留痕迹。
+            System.Diagnostics.Debug.WriteLine($"[AppPaths] 读取数据目录环境变量失败，降级到默认路径决议: {ex.Message}");
         }
 
         return IsPortableMode ? PortableDataDirectory : RoamingDataDirectory;
@@ -128,9 +130,10 @@ public static class AppPaths
                     return "环境变量模式 (STICKYNOTES_DATA_DIR)";
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                // 同上：避免 AppPaths ↔ AppLog 递归，使用 Debug 输出
+                System.Diagnostics.Debug.WriteLine($"[AppPaths] 判定数据目录来源时读取环境变量失败: {ex.Message}");
             }
 
             return IsPortableMode ? "便携绿化模式 (app_data)" : "标准漫游模式 (%LOCALAPPDATA%)";
