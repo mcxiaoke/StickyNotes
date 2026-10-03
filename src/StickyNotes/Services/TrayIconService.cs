@@ -51,12 +51,13 @@ public sealed class TrayIconService : IDisposable
         InitActivationHelperWindow();
 
         // 2. 初始化 TaskbarIcon 托盘控件
+        // 只绑定 LeftClickCommand：双击时 Shell 会先送左键抬起再送双击事件，激活动作本就
+        // 会被幂等地执行多次；再绑 DoubleClickCommand 只会让同一次双击触发三遍激活（N-5）。
         _taskbarIcon = new TaskbarIcon
         {
             ToolTipText = "StickyNotes 便签",
             MenuActivation = PopupActivationMode.RightClick,
-            LeftClickCommand = new RelayCommand(OpenOrActivateListWindow),
-            DoubleClickCommand = new RelayCommand(OpenOrActivateListWindow)
+            LeftClickCommand = new RelayCommand(OpenOrActivateListWindow)
         };
 
         // 加载应用程序托盘图标
@@ -69,7 +70,7 @@ public sealed class TrayIconService : IDisposable
         try
         {
             _taskbarIcon.ForceCreate();
-            AppLog.Info("[TrayIconService] 系统托盘图标创建成功 (Hardcodet.NotifyIcon.Wpf)");
+            AppLog.Info("[TrayIconService] 系统托盘图标创建成功 (H.NotifyIcon.Wpf)");
         }
         catch (Exception ex)
         {
