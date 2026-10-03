@@ -117,11 +117,12 @@
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
     </Style>
 
-    <!-- 微型次级说明/标签字 -->
+    <!-- 微型次级说明/标签字（默认允许换行：说明类文案多为整句，避免容器偏窄时被硬截断且无省略号） -->
     <Style x:Key="Type.CaptionSubtle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
     </Style>
 

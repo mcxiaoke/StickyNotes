@@ -20,6 +20,7 @@ public sealed class NoteRepository : INoteRepository
     {
         var connection = _context.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        // Microsoft.Data.Sqlite 连接串不支持同步级别，只能在建连后单独下发（缓存为 NORMAL，兼顾性能与抗突发中断）
         await using var pragma = connection.CreateCommand();
         pragma.CommandText = "PRAGMA synchronous = NORMAL;";
         await pragma.ExecuteNonQueryAsync(cancellationToken);
@@ -286,8 +287,7 @@ public sealed class NoteRepository : INoteRepository
                 WindowY = $y,
                 WindowWidth = $width,
                 WindowHeight = $height,
-                IsOpen = $isOpen,
-                UpdatedAt = $updatedAt
+                IsOpen = $isOpen
             WHERE Id = $id;
             """;
         command.Parameters.AddWithValue("$id", id.ToString());
@@ -296,7 +296,6 @@ public sealed class NoteRepository : INoteRepository
         command.Parameters.AddWithValue("$width", width);
         command.Parameters.AddWithValue("$height", height);
         command.Parameters.AddWithValue("$isOpen", isOpen ? 1 : 0);
-        command.Parameters.AddWithValue("$updatedAt", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

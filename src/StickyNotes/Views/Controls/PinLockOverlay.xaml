@@ -37,6 +37,7 @@
                          PasswordChar="●"
                          HorizontalContentAlignment="Center"
                          VerticalContentAlignment="Center"
+                         AutomationProperties.Name="PIN 密码输入框"
                          KeyDown="PinBox_KeyDown" />
 
             <!-- 错误提示：验证失败时显示 -->
@@ -54,6 +55,7 @@
                        Foreground="{StaticResource Fluent.AccentBrush}"
                        Cursor="Hand"
                        HorizontalAlignment="Center"
+                       AutomationProperties.Name="忘记 PIN 怎么办"
                        Margin="0,24,0,0"
                        MouseLeftButtonDown="ForgotPin_Click" />
         </StackPanel>

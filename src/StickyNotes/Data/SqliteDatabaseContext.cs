@@ -22,6 +22,10 @@ public sealed class SqliteDatabaseContext
             ForeignKeys = true,
             DefaultTimeout = 5
         };
+        // 注意：Microsoft.Data.Sqlite 的 SqliteConnectionStringBuilder 不支持 "synchronous" 关键字
+        // （仅支持 Data Source / Mode / Cache / Password / Foreign Keys / Recursive Triggers /
+        //  Default Timeout / Pooling），因此 synchronous 只能在每次建连后以 PRAGMA 单独下发，
+        // 见 NoteRepository.OpenConnectionAsync。审查报告 F-P2-4 建议的「并入连接串」在本 provider 下不可行。
         _connectionString = builder.ToString();
     }
 

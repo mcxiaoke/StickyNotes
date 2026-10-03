@@ -143,7 +143,7 @@ public class UiRenderingAndScreenshotTests
             var win = new NotesListWindow(vm);
 
             // 断言窗口基本属性与数据展示
-            Assert.AreEqual("彩色便签", win.Title);
+            Assert.AreEqual("便签", win.Title);
             Assert.AreEqual(3, vm.Notes.Count);
             Assert.IsFalse(vm.IsSearching);
 

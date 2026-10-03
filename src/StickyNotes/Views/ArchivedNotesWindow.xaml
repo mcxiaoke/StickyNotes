@@ -4,7 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:models="clr-namespace:StickyNotes.Models"
                  xmlns:controls="clr-namespace:StickyNotes.Views.Controls"
-                 Title="彩色便签"
+                 Title="已归档便签"
                  Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
                  Width="480" Height="720"
                  MinWidth="380" MinHeight="520"
@@ -198,6 +198,7 @@
                                                     <!-- 恢复便签按钮 -->
                                                     <Button Style="{StaticResource StickyToolbarButtonStyle}"
                                                             ToolTip="恢复便签到主列表"
+                                                            AutomationProperties.Name="恢复便签到主列表"
                                                             Margin="0,0,4,0"
                                                             Click="RestoreNoteButton_Click">
                                                         <ui:SymbolIcon Symbol="ArrowUndo20"
@@ -208,6 +209,7 @@
                                                     <!-- 彻底永久删除按钮 -->
                                                     <Button Style="{StaticResource StickyToolbarButtonStyle}"
                                                             ToolTip="彻底删除该便签 (不可撤销)"
+                                                            AutomationProperties.Name="彻底删除该便签"
                                                             Click="HardDeleteNoteButton_Click">
                                                         <ui:SymbolIcon Symbol="Delete20"
                                                                        FontSize="15"
@@ -234,7 +236,7 @@
                                                            Style="{StaticResource Type.CaptionSubtle}"
                                                            Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
                                                            VerticalAlignment="Center">
-                                                    <Run Text="修改于 " /><Run Text="{Binding UpdatedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}', Mode=OneWay}" />
+                                                    <Run Text="修改于 " /><Run Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}, Mode=OneWay}" />
                                                 </TextBlock>
                                             </Grid>
                                         </Grid>

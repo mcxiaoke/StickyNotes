@@ -4,7 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:models="clr-namespace:StickyNotes.Models"
                  xmlns:controls="clr-namespace:StickyNotes.Views.Controls"
-                 Title="彩色便签"
+                 Title="便签"
                  Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
                  Width="480" Height="720"
                  MinWidth="380" MinHeight="520"
@@ -159,6 +159,7 @@
                     <!-- 右侧辅助提示 -->
                     <TextBlock Grid.Column="1"
                                Style="{StaticResource Type.CaptionSubtle}"
+                               TextWrapping="NoWrap"
                                HorizontalAlignment="Right"
                                VerticalAlignment="Center"
                                Text="双击卡片打开" />
@@ -317,6 +318,7 @@
                                                                    Visibility="{Binding IsPinnedInList, Converter={StaticResource BoolToVisibilityConverter}}" />
                                                     <Button Style="{StaticResource StickyToolbarButtonStyle}"
                                                             ToolTip="便签操作"
+                                                            AutomationProperties.Name="便签操作"
                                                             Click="CardMoreButton_Click">
                                                         <ui:SymbolIcon Symbol="MoreHorizontal20"
                                                                        FontSize="14"

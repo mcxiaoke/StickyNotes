@@ -88,7 +88,9 @@ public sealed class HotKeyService : IDisposable
             AppLog.Warn("[HotKeyService] 全局热键 Win+Alt+H 注册失败 (可能被其它软件占用)");
         }
 
-        _isRegistered = true;
+        // 仅在至少一个热键真正注册成功时才置位，否则保留 false 以便用户关闭再开启开关时能够重试注册
+        _isRegistered = successN || successH;
+        AppLog.Info($"[HotKeyService] 全局热键注册结果: Win+Alt+N={successN}, Win+Alt+H={successH}, IsRegistered={_isRegistered}");
     }
 
     public void UnregisterHotKeys()
