@@ -267,6 +267,16 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     internal ListBox SearchHitsListBoxControl => SearchHitsListBox;
     internal Wpf.Ui.Controls.TextBox SearchBoxControl => SearchBox;
 
+    /// <summary>测试钩子：PIN 遮罩锁定状态（供锁定态快捷键拦截用例设置/读取）</summary>
+    internal bool IsPinLockedForTest
+    {
+        get => PinOverlay.IsLocked;
+        set => PinOverlay.IsLocked = value;
+    }
+
+    /// <summary>测试钩子：以指定修饰键驱动窗口级快捷键处理逻辑（Ctrl 组合键无法在单测中伪造 Keyboard.Modifiers）</summary>
+    internal void RaiseWindowPreviewKeyDown(KeyEventArgs e, ModifierKeys modifiers) => HandlePreviewKeyDown(e, modifiers);
+
     internal void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Down)
@@ -375,9 +385,18 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         }
     }
 
-    private void NotesListWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void NotesListWindow_PreviewKeyDown(object sender, KeyEventArgs e) => HandlePreviewKeyDown(e, Keyboard.Modifiers);
+
+    /// <summary>
+    /// 窗口级按键分发。<b>PIN 锁定优先于一切快捷键</b>：锁定态下 Ctrl+N/Ctrl+F 等组合键若先被处理，
+    /// 会绕过遮罩打开搜索框或直接新建一张不含遮罩的便签窗口，使锁定形同虚设。
+    /// 修饰键由参数传入，以便单测在无法改写只读的 <see cref="Keyboard.Modifiers"/> 时仍能驱动 Ctrl 组合键路径。
+    /// </summary>
+    private void HandlePreviewKeyDown(KeyEventArgs e, ModifierKeys modifiers)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        if (PinOverlay.IsLocked) return;
+
+        if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control)
         {
             if (e.Key == Key.N)
             {
