@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using StickyNotes.Data;
 using StickyNotes.Models;
@@ -208,6 +209,30 @@ public class SearchServiceTests
             PumpDispatcher(450);
             Assert.AreEqual(1, vm.SearchHitCount, "第二次搜索应命中 1 条");
         });
+    }
+
+    /// <summary>
+    /// F-P3-20：摘要单行截断只能由 SearchService 一处决定。
+    /// 卡片此前套用 <c>Type.Body</c>（含 TextTrimming）会把已截断的行再省略一次，
+    /// 出现非预期「…」。此用例锁定「超长命中行只被截断一次且长度有界」。
+    /// </summary>
+    [TestMethod]
+    public void Search_LongHitLine_SnippetIsTruncatedExactlyOnce()
+    {
+        var service = new SearchService();
+        var longLine = "前缀填充文字" + new string('甲', 120) + "关键词" + new string('乙', 120);
+        var note = new Note { Id = Guid.NewGuid(), Content = longLine };
+
+        var hit = service.Search(new[] { note }, "关键词").Single();
+
+        // 渲染用的分段摘要（高亮渲染的真正输入）长度有界，不会把整行 250+ 字符塞进卡片
+        var rendered = string.Concat(hit.Segments.Select(x => x.Text));
+        Assert.IsTrue(rendered.Length <= 100,
+            $"渲染摘要应被截断到有界长度，实际 {rendered.Length}");
+        // 截断结果仍包含关键词，说明截取窗口定位正确
+        Assert.IsTrue(rendered.Contains("关键词"), "截断后的摘要仍应包含关键词");
+        // 不应出现「……」，即截断只发生一次
+        Assert.IsFalse(rendered.Contains("……"), "不应出现重复省略号（二次截断）");
     }
 
     [TestMethod]

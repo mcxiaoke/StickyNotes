@@ -118,7 +118,13 @@ public partial class NoteViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 交互式调整当前便签显示字号 (支持 Ctrl+滚轮缩放，限制在 10 ~ 36 pt)
+    /// 交互式调整便签正文字号（Ctrl+滚轮，限制在 10 ~ 36 pt）。
+    /// <para>
+    /// <b>产品契约（有意为之，勿改）</b>：字号是<b>全局</b>设置 —— 设置页提供同样的
+    /// 字号下拉项并承诺“即时生效”，任意一张便签上缩放会同步影响全部便签与设置页。
+    /// 每一步缩放会立即落盘一次（含顺带触发的备份/清理），这是该设计的已知代价；
+    /// 若改为“按便签记忆 + 防抖落盘”，将改变用户在设置页看到的全局语义。
+    /// </para>
     /// </summary>
     public void ChangeFontSize(double delta)
     {

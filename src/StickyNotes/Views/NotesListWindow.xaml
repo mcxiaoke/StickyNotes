@@ -223,7 +223,8 @@
                                             BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
                                             BorderThickness="1"
                                             Padding="{StaticResource Thickness.CardPadding}"
-                                            MouseLeftButtonDown="NoteCard_MouseLeftButtonDown">
+                                            MouseLeftButtonDown="NoteCard_MouseLeftButtonDown"
+                                            MouseRightButtonDown="NoteCard_MouseRightButtonDown">
                                         <!-- 鼠标滑过平滑柔和光影与键盘选中轮廓 -->
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -421,7 +422,8 @@
                                         BorderThickness="1"
                                         Padding="{StaticResource Thickness.SearchHitPadding}"
                                         Cursor="Hand"
-                                        MouseLeftButtonDown="SearchHitCard_MouseLeftButtonDown">
+                                        PreviewMouseLeftButtonDown="SearchHitCard_PreviewMouseLeftButtonDown"
+                                        MouseLeftButtonUp="SearchHitCard_MouseLeftButtonUp">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Effect">
@@ -527,7 +529,9 @@
                                                                         </Border.Style>
                                                                         <TextBlock Text="{Binding Text}">
                                                                             <TextBlock.Style>
-                                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
+                                                                                <Style TargetType="TextBlock">
+                                                                                    <Setter Property="FontSize" Value="13" />
+                                                                                    <Setter Property="TextWrapping" Value="Wrap" />
                                                                                     <Setter Property="Foreground" Value="{Binding DataContext.Color, RelativeSource={RelativeSource AncestorType=ListBoxItem}, Converter={StaticResource NoteColorToTextConverter}}" />
                                                                                     <Style.Triggers>
                                                                                         <DataTrigger Binding="{Binding IsHit}" Value="True">

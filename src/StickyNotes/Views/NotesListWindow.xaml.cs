@@ -364,7 +364,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             else
             {
                 SearchBox.Focus();
-                SearchBox.SelectAll();
+                SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
             }
         }
         else
@@ -380,7 +380,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             else
             {
                 SearchBox.Focus();
-                SearchBox.SelectAll();
+                SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
             }
         }
     }
@@ -407,7 +407,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             if (e.Key == Key.F)
             {
                 SearchBox.Focus();
-                SearchBox.SelectAll();
+                SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
                 e.Handled = true;
                 return;
             }
@@ -457,7 +457,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 else
                 {
                     SearchBox.Focus();
-                    SearchBox.SelectAll();
+                    SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
                     e.Handled = true;
                 }
             }
@@ -471,7 +471,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 else
                 {
                     SearchBox.Focus();
-                    SearchBox.SelectAll();
+                    SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
                     e.Handled = true;
                 }
             }
@@ -560,7 +560,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         if (e.Key == Key.Up && SearchHitsListBox.SelectedIndex <= 0)
         {
             SearchBox.Focus();
-            SearchBox.SelectAll();
+            SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
             e.Handled = true;
         }
         else if (e.Key == Key.Enter && SearchHitsListBox.SelectedItem is SearchHit hit)
@@ -581,7 +581,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         if (e.Key == Key.Up && NotesListBox.SelectedIndex <= 0)
         {
             SearchBox.Focus();
-            SearchBox.SelectAll();
+            SearchBox.CaretIndex = SearchBox.Text?.Length ?? 0;
             e.Handled = true;
         }
         else if (e.Key == Key.Enter && NotesListBox.SelectedItem is Note note)
@@ -591,12 +591,52 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         }
     }
 
-    private void SearchHitCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    /// <summary>搜索卡片按下位置：用于区分「点击」与「拖拽选择摘要文字」</summary>
+    private Point _searchHitPressPoint;
+    private bool _searchHitPressed;
+
+    /// <summary>
+    /// 记录按下位置。原实现在 MouseLeftButtonDown 直接跳转（按下即走），
+    /// 导致用户无法在摘要里选中/复制文字，拖拽误触也会跳走（原 F-P3-15）。
+    /// </summary>
+    private void SearchHitCard_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        _searchHitPressPoint = e.GetPosition(this);
+        _searchHitPressed = true;
+    }
+
+    private void SearchHitCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_searchHitPressed)
+        {
+            return;
+        }
+
+        _searchHitPressed = false;
+
+        // 移动超过阈值视为拖拽选择文字，不触发跳转
+        var releasePoint = e.GetPosition(this);
+        if (Math.Abs(releasePoint.X - _searchHitPressPoint.X) > 4 ||
+            Math.Abs(releasePoint.Y - _searchHitPressPoint.Y) > 4)
+        {
+            return;
+        }
+
         if (sender is FrameworkElement { DataContext: SearchHit hit })
         {
             SearchHitsListBox.SelectedItem = hit;
             ViewModel.JumpToSearchHitCommand.Execute(hit);
+        }
+    }
+
+    /// <summary>
+    /// 右键先选中该项：否则右键菜单的操作对象与视觉高亮不一致，易误归档错便签（原 F-P3-18）。
+    /// </summary>
+    private void NoteCard_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: Note note })
+        {
+            NotesListBox.SelectedItem = note;
         }
     }
 

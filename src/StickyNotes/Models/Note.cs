@@ -81,10 +81,19 @@ public sealed partial class Note : ObservableObject
         set => SetProperty(ref _isDeleted, value);
     }
 
-    public double WindowX { get; set; } = 150;
-    public double WindowY { get; set; } = 150;
-    public double WindowWidth { get; set; } = 380;
-    public double WindowHeight { get; set; } = 420;
+    /// <summary>新建便签的默认落点（与 <c>SqliteDatabaseContext</c> 的列默认值保持一致）</summary>
+    public const double DefaultWindowX = 150;
+    /// <summary>新建便签的默认落点（与 <c>SqliteDatabaseContext</c> 的列默认值保持一致）</summary>
+    public const double DefaultWindowY = 150;
+    /// <summary>新建便签的默认物理宽度</summary>
+    public const double DefaultWindowWidth = 380;
+    /// <summary>新建便签的默认物理高度</summary>
+    public const double DefaultWindowHeight = 420;
+
+    public double WindowX { get; set; } = DefaultWindowX;
+    public double WindowY { get; set; } = DefaultWindowY;
+    public double WindowWidth { get; set; } = DefaultWindowWidth;
+    public double WindowHeight { get; set; } = DefaultWindowHeight;
     public bool IsOpen { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

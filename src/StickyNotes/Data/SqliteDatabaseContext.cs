@@ -91,8 +91,8 @@ public sealed class SqliteDatabaseContext
                     IsDeleted      INTEGER NOT NULL DEFAULT 0,
                     WindowX        REAL NOT NULL DEFAULT 150,
                     WindowY        REAL NOT NULL DEFAULT 150,
-                    WindowWidth    REAL NOT NULL DEFAULT 320,
-                    WindowHeight   REAL NOT NULL DEFAULT 360,
+                    WindowWidth    REAL NOT NULL DEFAULT 380,
+                    WindowHeight   REAL NOT NULL DEFAULT 420,
                     IsOpen         INTEGER NOT NULL DEFAULT 1,
                     CreatedAt      TEXT NOT NULL,
                     UpdatedAt      TEXT NOT NULL
