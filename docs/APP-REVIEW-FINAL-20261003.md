@@ -5,7 +5,7 @@
 > **审查对象**：StickyNotes v1.1.2 @ commit `94ed507`（工作区干净）
 > **合并来源**：4 份独立审查报告 —— 详见 §1 来源清单
 > **基线复验**：`dotnet build -c Release` → **0 错误 0 警告**；`dotnet test` → **71/71 通过**（11s，SDK 10.0.400）；4 组新增探针实证（用后已清理，`git status` 干净）
-> **修复状态（2026-10-03 更新）**：本报告 **2 个 P0 与 6 个 P1 已完成修复并通过回归验证**；**6 个 P1 部分完成**；**1 项建议经实测证伪已撤销**；其余 P2/P3 未修。修复详情见 `docs/CHANGES-20261003.md`，代码提交 `67471c0` → `237e0c8`（6 批）。**完整状态见文末《修复状态总览》**。
+> **修复状态（2026-10-03 更新）**：本报告 **2 个 P0 与 6 个 P1 已完成修复并通过回归验证**；**6 个 P1 部分完成**（其中 F-P1-2 / F-P1-7 / F-P1-8 已于当日深夜补齐修复，见上方「追加修复」）；**1 项建议经实测证伪已撤销**；其余 P2/P3 未修。修复详情见 `docs/CHANGES-20261003.md`，代码提交 `67471c0` → `9e15876`。**完整状态见文末《修复状态总览》与 §12.3。**
 >
 > **追加修复（2026-10-03 晚间，提交 `f65c12b` → 本批次，共 5 批）**：按"低风险 × 高收益"原则继续处理 §11.5 的未修项 ——
 > ① **F-P1-1 子项 1**：PIN 锁定态 `Ctrl+N`/`Ctrl+F` 绕过（**已修**，新增回归用例）；
@@ -15,6 +15,13 @@
 > ⑤ 文档回写：`APP-ARCHITECTURE.md` 与 `APP-PRODUCT.md` 的漂移点已逐条更正并加"历史设计文档"警示。
 > **未做**：GitHub Actions/CI（用户明确排除）、`Directory.Packages.props`、Costura 单 exe 真机验证。
 > **结论更正 1 项**：F-P3-19 建议的"字号按便签记忆"与设置页"全局字号、即时生效"的产品契约冲突，**改为保留既有行为 + 注释固化 + 回归测试**（详见变更记录批次 C）。详见文末 §11.7。
+>
+> **追加修复（2026-10-03 深夜，提交 `f9744e2` → `9e15876`，共 4 批）**：按 §12.3 的未做清单，继续处理「低风险 × 高收益」项 ——
+> ① **F-P1-2** 导入丢三态 + 幽灵便签（DTO 补 `IsPinnedInList`/`AlwaysOnTop`/`IsOpen`，新增 `NotesReloadedRequestedMessage` 全量重载）；
+> ② **F-P1-7** `AutoSaveCoordinator` CTS 使用中 `Dispose`（所有权单一化，只 `Cancel` 不 `Dispose`）；
+> ③ **F-P1-8** 托盘四宗毛病（`TaskbarCreated` / `NIM_SETVERSION` / `WM_CANCELMODE` / 去 `HWND_BROADCAST`）；
+> ④ **F-P2-22** Trigger 内联 `DropShadowEffect` 全部改为引用固定单例令牌。
+> 详见 §12.3 更新表与 `docs/CHANGES-20261003.md`。**测试 83 → 94 项全绿**。
 >
 > **一句话结论（原始基线结论，已被上方修复状态部分取代）**：**架构与代码组织水平显著高于同类个人桌面项目，但存在 2 个必须立即修复的 P0 缺陷——「正常退出后桌面布局全丢」与「空白便签正文被占位文案污染并可落库」，二者均已端到端复现。修复这 2 项后，本项目即可从「能演示」跨入「可交付」；其余 30 余项为质量、性能与体验改进项，不阻塞交付。**
 
@@ -73,7 +80,11 @@
 | ❌(未修) | 2026-10-03 复核确认**缺陷仍在**，本轮未处理 |
 | ⛔(撤销) | 原建议**经实测证伪**，不应施工（见文末 §11.4） |
 
-**修复后进展**：P0 **2/2 已修**；P1 **6 项已修 + 6 项部分完成**；P2 附带完成 6 项（另 1 项撤销）；P3 完成 3 项。**总计 23 项得到处理**，详见文末《修复状态总览》。
+**修复后进展**：P0 **2/2 已修**；P1 **9 项已修 + 3 项部分完成**（F-P1-2 / F-P1-7 / F-P1-8 于当日深夜补齐）；P2 附带完成 7 项（另 1 项撤销）；P3 完成 3 项。**总计 27 项得到处理**，详见文末《修复状态总览》与 §12.3。
+
+| 追击批次 | 提交 | 覆盖项 |
+|:--|:--|:--|
+| F~I（2026-10-03 深夜） | `f9744e2` → `9e15876` | **F-P1-2**、**F-P1-7**、**F-P1-8**、**F-P2-22** |
 
 > 去重说明：四份原始报告累计列出约 120 条问题项，合并同类后为 **63 项**（2 + 12 + 29 + 20）。典型合并例：R4 的 `P2-1`（托盘无 TaskbarCreated）与 R3 的 `P1-6`（托盘四宗毛病）合并为 `F-P1-8`；R1 的 `P1-7`（Trigger 替换 Effect 强制软件渲染）与 R3 的 `§6-1` 合并为 `F-P2-22`。
 
@@ -193,7 +204,8 @@ WeakReferenceMessenger.Default.Send(
 **修复**：在 `PreviewKeyDown` **首行**判断 `PinOverlay.IsLocked`，锁定时拦截除遮罩输入外的全部按键；并在 ViewModel 的命令层（`NewNoteAsync` 等）加锁检查兜底。
 
 #### F-P1-2　JSON 导出/导入丢失三项状态，且导入后主列表不刷新并产生「幽灵便签」
-> **修复状态：⚠️ 部分修复**（2026-10-03）—— 已完成项与剩余项详见文末 §11.2
+> **修复状态：✅ 已修复**（2026-10-03 深夜，提交 `f9744e2`）—— 详见文末 §12.3 更新表
+> 三个子问题（丢三态 / 幽灵便签 / `IsOpen` 恒 false）**已全部处理**，另新增 3 个回归用例。
 
 | 来源 | R3 `P0-3`（独立发现）· R2 `P2-3` 命中其中「丢字段」部分 · **实证**：★☆ 代码确认 |
 
@@ -258,7 +270,7 @@ Run() 已返回 / 进程即将结束          ← await 之后的续体一次都
 **修复**：写临时文件后 `File.Replace` 原子替换；解析失败时保留 `.bak` 并 `AppLog.Error`；PIN 字段损坏时应显式提示用户而非静默降级。
 
 #### F-P1-7　`AutoSaveCoordinator` 在 CTS 仍被使用时 `Dispose`（4 处同模式）
-> **修复状态：⚠️ 部分修复**（2026-10-03）—— 已完成项与剩余项详见文末 §11.2
+> **修复状态：✅ 已修复**（2026-10-03 深夜，提交 `d25e19d`）—— 详见文末 §12.3 更新表
 
 **来源**：R2 `P1-5` + R3 `P1-3`（两份独立发现，结论一致）· **实证**：★☆ 代码确认
 
@@ -278,7 +290,7 @@ if (_pendingTasks.TryGetValue(noteId, out var existing))
 **修复**：改为单个长生命周期 `DispatcherTimer`/`PeriodicTimer` 实现防抖；或 `Cancel()` 后**不** `Dispose`，交由任务 `finally` 在确认 `TryRemove` 之后释放。
 
 #### F-P1-8　托盘图标四宗毛病（`TaskbarCreated` / `NIM_SETVERSION` / `WM_CANCELMODE` / `HWND_BROADCAST`）
-> **修复状态：⚠️ 部分修复**（2026-10-03）—— 已完成项与剩余项详见文末 §11.2
+> **修复状态：✅ 已修复**（2026-10-03 深夜，提交 `2ab105a`）—— 四宗毛病全部处理，详见文末 §12.3 更新表
 
 **来源**：R2 `P2-21`+`P2-22`、R3 `P1-6`、R4 `P2-1`（三份命中，本次合并）· **实证**：★☆ 代码确认
 
@@ -377,7 +389,7 @@ if (_pendingTasks.TryGetValue(noteId, out var existing))
 | 编号 | 问题 | 位置 | 来源 |
 |:---|:---|:---|:---|
 | F-P2-21 ✅(已修) | 转换器每次 `Convert` 都 `new SolidColorBrush(ColorConverter.ConvertFromString(hex))` —— **解析字符串 + 分配 + 未 `Freeze`**，且每次拿到新实例都会让 WPF 判定 brush 变化并重绘。`NoteWindow.xaml` 绑定 9 处，一次换色 = 9 次分配；列表/搜索卡片还有十几处 | `NoteColorConverters.cs`（6 个转换器） | R2、R3、R4 |
-| F-P2-22 | **Style Trigger 中替换 `Effect` 实例**（`DropShadowEffect`），每次 hover/选中都新建效果对象。WPF 的 `Effect` **强制该元素走软件渲染**，列表滚动 + 鼠标划过时 CPU 飙升。**R1 的 `P1-7` 已明确要求改为固定单例，至今未执行** | `NotesListWindow.xaml:230,241,251`、`ArchivedNotesWindow.xaml:152,159`、`DesignTokens.xaml:163-166` | R1、R3 |
+| F-P2-22 ✅(已修) | **Style Trigger 中替换 `Effect` 实例**（`DropShadowEffect`），每次 hover/选中都新建效果对象。WPF 的 `Effect` **强制该元素走软件渲染**，列表滚动 + 鼠标划过时 CPU 飙升。**R1 的 `P1-7` 已明确要求改为固定单例，长期未执行**（2026-10-03 深夜已修，提交 `9e15876`） | `NotesListWindow.xaml`、`ArchivedNotesWindow.xaml`、`DesignTokens.xaml` | R1、R3 |
 | F-P2-23 | 每个按键创建一个 `Task.Run` + 一个 `CancellationTokenSource`（连续打字时短命对象 churn）；防抖语义应用单个 `Timer` | `AutoSaveCoordinator.cs:44-76` | R3 |
 | F-P2-24 ⚠️(部分) | `AppLog` 每写一行都 `File.AppendAllText`（开/关文件 + 全局 lock），且**无保留期清理** —— 按日轮转但旧文件永不删除，日志目录无上限增长。另：类注释称"Release 模式生效"但**代码里没有任何 `DEBUG` 门控**（文档与实现不符） | `AppLog.cs:34-39` | R3 |
 | F-P2-25 | **搜索性能余量不足**：产品文档承诺的 NFR 规模（1000 便签 / 约 10 万字）下达标（5.3ms），但单张内容变长后退化（1000 便签 × 50~100 行 → 44~48ms；3000 便签 → 142.8ms）。根因是每便签最多 3 轮全文扫描 | `SearchService.cs:43-54` | R4（**本次重新定级，见 §3.1**） |
@@ -760,7 +772,7 @@ R2 把「`settings.json` 非原子写导致 PIN 静默失效」列为 P2-1、「
 | F-P2-19 | 搜索回调双重职责/搜索风暴 | R2 `P2-13`、R4 `P1-4`（部分） |
 | F-P2-20 | 后台线程投递已关闭 Dispatcher | R3 `P1-5` |
 | F-P2-21 ✅(已修) | 转换器每次新建 Brush | R2 `P3-5`、R3 `§4.1`、R4 `P2-7` |
-| F-P2-22 | Trigger 换 Effect 强制软件渲染 | R1 `P1-7`、R3 `§6-1` |
+| F-P2-22 ✅(已修) | Trigger 换 `Effect` 强制软件渲染 | R1 `P1-7`、R3 `§6-1` |
 | F-P2-23 | 每按键一个 Task.Run | R2 `P3-9`、R3 `§6-5` |
 | F-P2-24 ⚠️(部分) | AppLog 无清理 + 文档不符 | R2 `P3-8`、R3 `§6-6` |
 | F-P2-25 | 搜索性能余量不足 | R4 `P1-4`（**降级 + 更正措辞**） |
@@ -901,10 +913,10 @@ R2 把「`settings.json` 非原子写导致 PIN 静默失效」列为 P2-1、「
 | 编号 | 已完成 | 仍未做 |
 |:--|:---|:---|
 | F-P1-1 | 未动 | **锁定时 `Ctrl+N`/`Ctrl+F` 仍可绕过 PIN**（子问题 1，未修）；子问题 2「命令层兜底」未做 |
-| F-P1-2 | 未动 | 导入 CTS/DTO 三字段、幽灵便签、`NotesReloadedRequestedMessage` **均未实施** |
-| F-P1-7 | 未动 | 防抖仍为「每按键 `Task.Run` + CTS」，**`:41/:106/:134/:157` 的 CTS `Dispose` 竞态仍在** |
-| F-P1-8 | 未动 | 托盘 `TaskbarCreated` / `NIM_SETVERSION` / `WM_CANCELMODE` / `HWND_BROADCAST` **四项全未做** |
-| F-P1-10 | ✅ **UTC 时间错 8 小时**（改走 `FriendlyDateTimeConverter`） | ❌ 虚拟化（`ItemsControl` 未换 `ListBox`）、❌ `Title`、❌ 键盘导航 |
+| F-P1-2 | ✅ **已修复**（`f9744e2`，2026-10-03 深夜） | 导出 DTO 补三字段；导入不再走 `IsPinned` 兼容 setter；新增 `NotesReloadedRequestedMessage` 全量重载消除幽灵便签；旧备份安全回落 |
+| F-P1-7 | ✅ **已修复**（`d25e19d`，2026-10-03 深夜） | CTS 所有权单一化：只由持有它的防抖任务在 `finally` 释放，其余入口只 `Cancel` 不 `Dispose`；落盘前 `TryRemove(KeyValuePair)` 比对 |
+| F-P1-8 | ✅ **已修复**（`2ab105a`，2026-10-03 深夜） | `TaskbarCreated` 重建图标 + `NIM_SETVERSION`(v4) + 菜单关闭 `WM_CANCELMODE` + 唤醒改 `EnumWindows` 定向投递 |
+| F-P1-10 | ✅ **UTC 时间错 8 小时**（改走 `FriendlyDateTimeConverter`） | ❌ 虚拟化（`ItemsControl` 未换 `ListBox`）、❌ `Title`（已改为「已归档便签」）、❌ 键盘导航 |
 | F-P1-11 | ✅ **无障碍标注**（图标按钮 / 调色盘 / PIN 框补 `AutomationProperties.Name`） | ❌ Tab 移焦、❌ 焦点视觉（`FocusVisualStyle="{x:Null}"` 仍在）、❌ `LiveRegion`。注：**F-P3-12 的换行修复顺带使「设置页 4 处硬截断」消失** |
 
 ### 11.3 附带修复（本轮顺带解决）
@@ -974,17 +986,34 @@ R2 把「`settings.json` 非原子写导致 PIN 静默失效」列为 P2-1、「
 
 ### 12.3 仍未做（明确记录）
 
+> **2026-10-03 晚间更新（批次 F~I，提交 `f9744e2` → `9e15876`）**：下方清单中的
+> **F-P1-2、F-P1-7、F-P1-8、F-P2-22 四项已完成修复**，逐项状态如下表；其余项仍未做。
+> 详细变更见 `docs/CHANGES-20261003.md` 顶部「批次 F~I」记录。
+
+| 编号 | 状态 | 提交 | 要点 |
+|:--|:--|:--|:---|
+| **F-P1-2** | ✅ **已修** | `f9744e2` | 导出 DTO 补 `IsPinnedInList`/`AlwaysOnTop`/`IsOpen`；导入不再走 `IsPinned` 兼容 setter（消除两态合并）；新增 `NotesReloadedRequestedMessage` 全量重载，消除幽灵便签；旧备份安全回落 |
+| **F-P1-7** | ✅ **已修** | `d25e19d` | CTS 所有权单一化：只由持有它的防抖任务在 `finally` 释放，其余入口只 `Cancel`；落盘前 `TryRemove(KeyValuePair)` 比对，杜绝误删新调度 |
+| **F-P1-8** | ✅ **已修** | `2ab105a` | 补 `TaskbarCreated` 重建 + `NIM_SETVERSION`(v4) + 菜单关闭 `WM_CANCELMODE`；唤醒由 `HWND_BROADCAST` 改 `EnumWindows` 定向投递本进程窗口 |
+| **F-P2-22** | ✅ **已修** | `9e15876` | 新增 4 个固定效果令牌，7 处 Trigger 内联 `DropShadowEffect` 全部改为引用单例（消除 hover/选中时重建 Effect 及强制软件渲染） |
+
 - **GitHub Actions / CI**：用户明确排除。
 - `Directory.Packages.props`（中央包版本管理）：当前 2 工程 / 10 个包引用，收益有限。
 - **Costura 单 exe 在干净机器缺原生 `e_sqlite3.dll`**：需人工在干净虚拟机验证 `publish.ps1` 产物。
-- **P2 剩余**：F-P2-3（Shared Cache + WAL）、F-P2-6（备份只跑一次）、F-P2-7（导入 N+1）、F-P2-8（搜索规则两份实现）、F-P2-9（全字段覆盖 UPSERT）、F-P2-11（`FlushSaveAsync` 双写）、F-P2-13（UI 线程阻塞）、F-P2-14 ~ F-P2-20、F-P2-22（Trigger 换 `Effect` 强制软件渲染）、F-P2-23、F-P2-25（搜索余量）、F-P2-26（截图像素断言）、F-P2-27（测试基建）。
-  - 其中 **F-P2-11 经复核确认仍然存在**；**F-P2-22 是 R1 时代遗留、至今未执行**的性能项（列表滚动 + hover 时 CPU 飙升），属"中等收益中等风险"，建议下一轮优先。
+- **P2 剩余**：F-P2-3（Shared Cache + WAL）、F-P2-6（备份只跑一次）、F-P2-7（导入 N+1）、F-P2-8（搜索规则两份实现）、F-P2-9（全字段覆盖 UPSERT）、F-P2-11（`FlushSaveAsync` 双写）、F-P2-13（UI 线程阻塞）、F-P2-14 ~ F-P2-20、F-P2-23、F-P2-25（搜索余量）、F-P2-26（截图缺像素级断言）、F-P2-27（测试基建）。
+  - 其中 **F-P2-11 经复核确认仍然存在**（`NoteViewModel.cs` 的 `FlushSaveAsync` 内 `FlushAsync` + `SaveAsync` 双写）。
+  - ⚠️ **F-P2-26 措辞更正**：原文「截图测试无像素断言、只生成 PNG 供人工查看」易被误读为"测试完全没断言"。实测 `UiRenderingAndScreenshotTests.cs` 有 40+ 条属性/键盘断言，**缺的只是对 PNG 像素的断言**；且 `TestEnvironment.SaveWindowSnapshot` 内部会 `win.Show()`，并非纯离屏渲染。后续按「**截图缺像素级断言**」理解。
 - **P3 剩余**：F-P3-2 的其余死符号、F-P3-4（`IsPinned` 双实现陷阱）、F-P3-6 ~ F-P3-8、F-P3-19（见 §12.2 更正）、F-P3-20 的其余细节（搜索跨行兜底 `CharIndex=0`、归档 `MessageBox` 未设 `Owner`、`RuntimeInfo` 硬编码 ".NET 8.0"、置顶筛选空状态提示）。
-- **F-P1 剩余**：F-P1-1 子项 2（命令层兜底）、F-P1-2（导入丢三态 + 幽灵便签）、F-P1-7（CTS `Dispose` 竞态）、F-P1-8（托盘四宗毛病）、F-P1-10 的虚拟化/键盘导航、F-P1-11 的 Tab 移焦与焦点视觉。
+  - 注：`Elevation.Card`/`CardHover`/`Popup`/`Window` **已不再是死令牌**（`SettingsWindow` 与 `NoteWindow` 在用），批次 I 又新增 4 个被 Trigger 引用的令牌，清理死符号时不要误删。
+- **F-P1 剩余**：F-P1-1 子项 2（命令层兜底）、F-P1-10 的虚拟化/键盘导航、F-P1-11 的 Tab 移焦与焦点视觉。
+  - 原列的 F-P1-2 / F-P1-7 / F-P1-8 已于 2026-10-03 深夜修复（见 §12.3 更新表）。
 
 ### 12.4 验证
 
-`dotnet build -c Release` → **0 错误 0 警告**（`Version=1.1.2` 可复现）；`dotnet test` → **83/83 通过**（本轮 78 → 83，新增 5 项）。
+`dotnet build -c Release` → **0 错误 0 警告**（`Version=1.1.2` 可复现）。
+
+- 批次 A~E（截至 `fab2d25`）：`dotnet test` → **83/83 通过**（78 → 83，新增 5 项）。
+- **批次 F~I（截至 `9e15876`）：`dotnet test` → 94/94 通过**（83 → 94，新增 11 项：F-P1-2 +3、F-P1-7 +2、F-P1-8 +4、F-P2-22 +2）。均为本地提交，未 push。
 
 ---
 
