@@ -13,6 +13,14 @@
                 <ResourceDictionary Source="Resources/StickyColors.xaml" />
                 <ResourceDictionary Source="Resources/DesignTokens.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- 全局 Windows 现代清晰文本渲染与默认字体 -->
+            <Style TargetType="{x:Type Window}">
+                <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+                <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+                <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
+                <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -29,15 +29,10 @@
         <!-- 1. 设置内容滚动区 -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="{StaticResource Thickness.PageMargin}">
-                <!-- 顶部大标题 -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                    <ui:SymbolIcon Symbol="Settings24"
-                                   FontSize="22"
-                                   Foreground="{StaticResource Fluent.AccentBrush}"
-                                   Margin="0,0,8,0" />
-                    <TextBlock Text="设置"
-                               Style="{StaticResource Type.TitleLarge}" />
-                </StackPanel>
+                <!-- 顶部页面标题 (遵循 Windows 11 Fluent 设置规范) -->
+                <TextBlock Text="设置"
+                           Style="{StaticResource Type.TitleLarge}"
+                           Margin="0,0,0,14" />
 
                 <!-- 分组 1: 外观与字体 -->
                 <TextBlock Text="外观与显示"
@@ -49,11 +44,11 @@
                         BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
                         BorderThickness="1"
                         Padding="{StaticResource Thickness.CardPadding}"
-                        Margin="0,0,0,16"
+                        Margin="0,0,0,14"
                         Effect="{StaticResource Elevation.Card}">
                     <StackPanel>
                         <!-- 字号调节行 -->
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -61,11 +56,11 @@
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock Text="便签正文字号"
-                                           Style="{StaticResource Type.BodyStrong}" />
+                                           Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="调整桌面便签贴纸的正文字体大小，即时生效"
                                            Style="{StaticResource Type.CaptionSubtle}"
                                            TextWrapping="Wrap"
-                                           Margin="0,2,0,0" />
+                                           Margin="0,3,0,0" />
                             </StackPanel>
 
                             <ComboBox Grid.Column="1"
@@ -99,69 +94,69 @@
                 <!-- 分组 2: 窗口与系统集成 (托盘、热键、开机自启) -->
                 <TextBlock Text="系统与常驻"
                            Style="{StaticResource Type.Subtitle}"
-                           Margin="0,0,0,8" />
+                           Margin="0,4,0,8" />
 
                 <Border CornerRadius="{StaticResource CornerRadius.Card}"
                         Background="{StaticResource Fluent.CardBgBrush}"
                         BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
                         BorderThickness="1"
                         Padding="{StaticResource Thickness.CardPadding}"
-                        Margin="0,0,0,16"
+                        Margin="0,0,0,14"
                         Effect="{StaticResource Elevation.Card}">
                     <StackPanel>
                         <!-- 1. 关闭主窗口时最小化到系统托盘 -->
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="关闭主窗口时最小化到系统托盘" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="关闭主窗口时最小化到系统托盘" Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="关闭主列表窗口后在后台保持运行，贴纸继续可用，通过托盘图标可随时唤醒"
-                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,3,0,0" />
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"
                                              IsChecked="{Binding MinimizeToTrayOnClose, Mode=TwoWay}"
                                              VerticalAlignment="Center" />
                         </Grid>
 
-                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
 
                         <!-- 2. 全局快捷键 -->
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="启用系统全局快捷键" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="启用系统全局快捷键" Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="Win+Alt+N：随时快速新建便签；Win+Alt+H：随时呼出便签管理中心"
-                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,3,0,0" />
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"
                                              IsChecked="{Binding EnableGlobalHotKeys, Mode=TwoWay}"
                                              VerticalAlignment="Center" />
                         </Grid>
 
-                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
 
                         <!-- 3. Windows 开机自动启动 -->
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="开机自动启动" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="开机自动启动" Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="计算机启动登录时自动启动 StickyNotes 并恢复桌面敞开贴纸"
-                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,3,0,0" />
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"
                                              IsChecked="{Binding IsAutoStartEnabled, Mode=TwoWay}"
                                              VerticalAlignment="Center" />
                         </Grid>
 
-                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
 
                         <!-- 4. 开机自启时静默启动至托盘 -->
                         <Grid>
@@ -170,9 +165,9 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="开机启动时最小化到托盘" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="开机启动时最小化到托盘" Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="随系统自启时不弹出管理中心主窗口，仅恢复桌面贴纸并在托盘静默就绪"
-                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,2,0,0" />
+                                           Style="{StaticResource Type.CaptionSubtle}" Margin="0,3,0,0" />
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"
                                              IsChecked="{Binding StartMinimized, Mode=TwoWay}"
@@ -184,27 +179,26 @@
                 <!-- 分组 3: 数据备份与迁移 -->
                 <TextBlock Text="数据与备份"
                            Style="{StaticResource Type.Subtitle}"
-                           Margin="0,0,0,8" />
+                           Margin="0,4,0,8" />
 
                 <Border CornerRadius="{StaticResource CornerRadius.Card}"
                         Background="{StaticResource Fluent.CardBgBrush}"
                         BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
                         BorderThickness="1"
                         Padding="{StaticResource Thickness.CardPadding}"
-                        Margin="0,0,0,16"
+                        Margin="0,0,0,14"
                         Effect="{StaticResource Elevation.Card}">
                     <StackPanel>
                         <TextBlock Text="JSON 备份导入与导出"
-                                   Style="{StaticResource Type.BodyStrong}" />
+                                   Style="{StaticResource Type.SettingTitle}" />
                         <TextBlock Text="将所有便签备份为标准 JSON 文件，或从备份文件还原便签数据"
                                    Style="{StaticResource Type.CaptionSubtle}"
-                                   Margin="0,2,0,12" />
+                                   Margin="0,3,0,12" />
 
                         <!-- 导出与导入按钮组 -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                             <ui:Button Appearance="Primary"
                                        Content="导出便签 (JSON)"
-                                       FontWeight="SemiBold"
                                        Margin="0,0,10,0"
                                        Padding="14,6"
                                        Command="{Binding ExportJsonCommand}">
@@ -235,7 +229,7 @@
                             <StackPanel Grid.Column="0">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="本地数据目录"
-                                               Style="{StaticResource Type.BodyStrong}" />
+                                               Style="{StaticResource Type.SettingTitle}" />
                                     <Border CornerRadius="4"
                                             Background="{DynamicResource ControlFillColorDefaultBrush}"
                                             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
@@ -277,29 +271,29 @@
                 <!-- 分组: 隐私保护 (PIN 锁定 + 闲时自动收起) -->
                 <TextBlock Text="隐私保护"
                            Style="{StaticResource Type.Subtitle}"
-                           Margin="0,0,0,8" />
+                           Margin="0,4,0,8" />
 
                 <Border CornerRadius="{StaticResource CornerRadius.Card}"
                         Background="{StaticResource Fluent.CardBgBrush}"
                         BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
                         BorderThickness="1"
                         Padding="{StaticResource Thickness.CardPadding}"
-                        Margin="0,0,0,16"
+                        Margin="0,0,0,14"
                         Effect="{StaticResource Elevation.Card}">
                     <StackPanel>
                         <!-- 1. PIN 锁定 -->
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="PIN 锁定" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="PIN 锁定" Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="{Binding PinStatusText}"
                                            Style="{StaticResource Type.CaptionSubtle}"
                                            TextWrapping="Wrap"
-                                           Margin="0,2,0,0" />
+                                           Margin="0,3,0,0" />
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -307,7 +301,6 @@
                                 <ui:Button Appearance="Primary"
                                            Content="启用 PIN"
                                            Padding="12,5"
-                                           FontWeight="SemiBold"
                                            Command="{Binding EnablePinCommand}"
                                            Visibility="{Binding IsPinEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
 
@@ -328,7 +321,7 @@
                             </StackPanel>
                         </Grid>
 
-                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
 
                         <!-- 2. 列表窗口闲时自动收起 -->
                         <Grid>
@@ -338,11 +331,11 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                <TextBlock Text="列表窗口不在前台时自动关闭" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="列表窗口不在前台时自动关闭" Style="{StaticResource Type.SettingTitle}" />
                                 <TextBlock Text="管理中心窗口持续不在前台达到设定时间后自动收起，再次打开时需输入 PIN（若已启用）"
                                            Style="{StaticResource Type.CaptionSubtle}"
                                            TextWrapping="Wrap"
-                                           Margin="0,2,0,0" />
+                                           Margin="0,3,0,0" />
                             </StackPanel>
 
                             <ComboBox Grid.Column="1"
@@ -359,14 +352,14 @@
                 <!-- 分组 3: 关于与版本 -->
                 <TextBlock Text="关于"
                            Style="{StaticResource Type.Subtitle}"
-                           Margin="0,0,0,8" />
+                           Margin="0,4,0,8" />
 
                 <Border CornerRadius="{StaticResource CornerRadius.Card}"
                         Background="{StaticResource Fluent.CardBgBrush}"
                         BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
                         BorderThickness="1"
                         Padding="{StaticResource Thickness.CardPadding}"
-                        Margin="0,0,0,16"
+                        Margin="0,0,0,14"
                         Effect="{StaticResource Elevation.Card}">
                     <StackPanel>
                         <!-- 产品头部 -->
@@ -378,10 +371,10 @@
                                    VerticalAlignment="Center" />
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="StickyNotes 彩色便签"
-                                           Style="{StaticResource Type.Subtitle}"
-                                           FontWeight="SemiBold" />
+                                           Style="{StaticResource Type.Subtitle}" />
                                 <TextBlock Text="基于 Windows 11 Fluent 2 现代桌面便签应用"
-                                           Style="{StaticResource Type.CaptionSubtle}" />
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           Margin="0,2,0,0" />
                             </StackPanel>
                         </StackPanel>
 
@@ -392,7 +385,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="应用版本" Style="{StaticResource Type.CaptionSubtle}" />
-                            <TextBlock Grid.Column="1" Text="{Binding AppVersion}" Style="{StaticResource Type.BodyStrong}" />
+                            <TextBlock Grid.Column="1" Text="{Binding AppVersion}" Style="{StaticResource Type.Body}" FontWeight="SemiBold" />
                         </Grid>
 
                         <Grid Margin="0,0,0,4">

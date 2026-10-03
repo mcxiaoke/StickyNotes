@@ -55,9 +55,9 @@
     <!-- ========================================================================= -->
     <!-- 4. 阴影体系规范（Elevation & DropShadow Tokens）                           -->
     <!-- ========================================================================= -->
-    <DropShadowEffect x:Key="Elevation.Card" BlurRadius="8" ShadowDepth="2" Opacity="0.06" Direction="270" />
-    <DropShadowEffect x:Key="Elevation.CardHover" BlurRadius="12" ShadowDepth="3" Opacity="0.12" Direction="270" />
-    <DropShadowEffect x:Key="Elevation.Popup" BlurRadius="16" ShadowDepth="4" Opacity="0.18" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.Card" BlurRadius="6" ShadowDepth="1" Opacity="0.04" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.CardHover" BlurRadius="10" ShadowDepth="2" Opacity="0.08" Direction="270" />
+    <DropShadowEffect x:Key="Elevation.Popup" BlurRadius="14" ShadowDepth="3" Opacity="0.12" Direction="270" />
     <DropShadowEffect x:Key="Elevation.Window" BlurRadius="12" ShadowDepth="2" Opacity="0.14" Direction="270" />
 
     <!-- ========================================================================= -->
@@ -65,29 +65,38 @@
     <!-- ========================================================================= -->
     <FontFamily x:Key="FontFamily.Default">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, sans-serif</FontFamily>
 
-    <!-- 管理中心主标题 -->
+    <!-- 窗口主标题 (Page Title - 优雅清秀大号标题，采用 Normal 字重规避假粗体) -->
     <Style x:Key="Type.TitleLarge" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
-        <Setter Property="FontSize" Value="20" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- 卡片与对话框标题 -->
+    <!-- 分组标题 (Section Header - 13.5px 正常字重，配合层次留白) -->
     <Style x:Key="Type.Subtitle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
-        <Setter Property="FontSize" Value="15" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
-    <!-- 强调正文 -->
+    <!-- 设置项标题 (规范常规字重 13.5px Normal，杜绝粗黑) -->
+    <Style x:Key="Type.SettingTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 强调正文 (仅用于极少特定重点标签) -->
     <Style x:Key="Type.BodyStrong" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
     </Style>
 
@@ -95,59 +104,68 @@
     <Style x:Key="Type.Body" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
-    <!-- 辅助/状态字 -->
+    <!-- 辅助/说明字 (自然呼吸感，优雅浅灰) -->
     <Style x:Key="Type.Caption" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
         <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
     </Style>
 
-    <!-- 微型小标签字 -->
+    <!-- 微型次级说明/标签字 -->
     <Style x:Key="Type.CaptionSubtle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.Default}" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{StaticResource Fluent.TextTertiaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
     </Style>
 
     <!-- ========================================================================= -->
     <!-- 6. 控件交互样式规范                                                         -->
     <!-- ========================================================================= -->
 
-    <!-- 分类筛选胶囊样式 (Filter Chip) -->
+    <!-- Windows 11 现代分段选择标签 (Segmented Tab Style) -->
     <Style x:Key="FilterChipStyle" TargetType="RadioButton">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{StaticResource Fluent.TextSecondaryBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="BorderBrush" Value="Transparent" />
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Padding" Value="12,5" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="ChipBorder"
+                    <Border x:Name="TabBorder"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource CornerRadius.Pill}"
-                            Padding="{TemplateBinding Padding}">
+                            CornerRadius="{StaticResource CornerRadius.Control}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ChipBorder" Property="Background" Value="#12000000" />
+                            <Setter TargetName="TabBorder" Property="Background" Value="#0C000000" />
+                            <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="ChipBorder" Property="Background" Value="{StaticResource Fluent.AccentLightBgBrush}" />
-                            <Setter TargetName="ChipBorder" Property="BorderBrush" Value="{StaticResource Fluent.AccentLightBorderBrush}" />
-                            <Setter Property="Foreground" Value="{StaticResource Fluent.AccentBrush}" />
-                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter TargetName="TabBorder" Property="Background" Value="#FFFFFF" />
+                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="#22000000" />
+                            <Setter TargetName="TabBorder" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.06" Direction="270" />
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -239,6 +257,72 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource Fluent.DangerBrush}" />
                             <Setter Property="Foreground" Value="#FFFFFF" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 便签 Flyout 菜单条目样式 (标准 Windows 11 菜单项体验：整行 Hover 高亮，左右内容对齐) -->
+    <Style x:Key="FluentFlyoutMenuItemStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{StaticResource CornerRadius.Small}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#0F000000" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#1C000000" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 便签 Flyout 危险操作菜单条目样式 (归档/删除) -->
+    <Style x:Key="FluentFlyoutDangerMenuItemStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{StaticResource CornerRadius.Small}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#14C42B1C" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#24C42B1C" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
