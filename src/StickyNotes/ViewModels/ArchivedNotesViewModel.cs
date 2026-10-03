@@ -67,7 +67,29 @@ public partial class ArchivedNotesViewModel : ObservableObject
 
     public bool HasNoNotes => ArchivedNotes.Count == 0;
 
+    /// <summary>
+    /// 「清空归档」按钮是否可用。
+    /// </summary>
+    /// <remarks>
+    /// 该值由 <see cref="ArchivedNotes"/> **集合内容**派生，而所有增删都是原地
+    /// <c>Clear/Add/Remove</c>（集合实例从不被替换），因此
+    /// <c>[NotifyPropertyChangedFor]</c> 挂在集合**属性 setter** 上的自动通知永远不会触发。
+    /// 任何改动集合的路径都必须在最后显式调用 <see cref="NotifyDerivedCollectionsChanged"/>，
+    /// 否则按钮会停留在窗口首次绑定时的取值（首次打开时集合为空 → 按钮永远是灰色）。
+    /// </remarks>
     public bool CanClearArchived => ArchivedNotes.Count > 0;
+
+    /// <summary>
+    /// 集合变更后统一发出所有派生属性的变更通知（含 <see cref="CanClearArchived"/>）。
+    /// 原地修改 <see cref="ArchivedNotes"/> 的每一处都必须调用本方法。
+    /// </summary>
+    private void NotifyDerivedCollectionsChanged()
+    {
+        OnPropertyChanged(nameof(FilteredNotes));
+        OnPropertyChanged(nameof(ArchivedCount));
+        OnPropertyChanged(nameof(HasNoNotes));
+        OnPropertyChanged(nameof(CanClearArchived));
+    }
 
     public ArchivedNotesViewModel(INoteRepository repository)
     {
@@ -92,9 +114,7 @@ public partial class ArchivedNotesViewModel : ObservableObject
             ArchivedNotes.Add(note);
         }
 
-        OnPropertyChanged(nameof(FilteredNotes));
-        OnPropertyChanged(nameof(ArchivedCount));
-        OnPropertyChanged(nameof(HasNoNotes));
+        NotifyDerivedCollectionsChanged();
     }
 
     partial void OnSearchTextChanged(string value)
@@ -112,9 +132,7 @@ public partial class ArchivedNotesViewModel : ObservableObject
         note.IsDeleted = false;
         ArchivedNotes.Remove(note);
 
-        OnPropertyChanged(nameof(FilteredNotes));
-        OnPropertyChanged(nameof(ArchivedCount));
-        OnPropertyChanged(nameof(HasNoNotes));
+        NotifyDerivedCollectionsChanged();
 
         // 广播恢复消息，主列表自动重新收纳
         WeakReferenceMessenger.Default.Send(new NoteRestoredMessage(note));
@@ -129,9 +147,7 @@ public partial class ArchivedNotesViewModel : ObservableObject
         await _repository.HardDeleteAsync(note.Id);
         ArchivedNotes.Remove(note);
 
-        OnPropertyChanged(nameof(FilteredNotes));
-        OnPropertyChanged(nameof(ArchivedCount));
-        OnPropertyChanged(nameof(HasNoNotes));
+        NotifyDerivedCollectionsChanged();
     }
 
     /// <summary>
@@ -143,8 +159,6 @@ public partial class ArchivedNotesViewModel : ObservableObject
         await _repository.ClearAllArchivedAsync();
         ArchivedNotes.Clear();
 
-        OnPropertyChanged(nameof(FilteredNotes));
-        OnPropertyChanged(nameof(ArchivedCount));
-        OnPropertyChanged(nameof(HasNoNotes));
+        NotifyDerivedCollectionsChanged();
     }
 }

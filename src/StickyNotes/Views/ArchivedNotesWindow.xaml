@@ -68,7 +68,8 @@
                 </StackPanel>
 
                 <!-- 右侧清空归档按钮 -->
-                <ui:Button Grid.Column="1"
+                <ui:Button x:Name="ClearAllButton"
+                           Grid.Column="1"
                            Appearance="Secondary"
                            Content="清空归档"
                            Padding="12,6"
