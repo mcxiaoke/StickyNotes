@@ -49,15 +49,27 @@
                        Margin="0,10,0,0"
                        Visibility="Collapsed" />
 
-            <!-- 忘记 PIN 指引（轻量防护定位，不做应用内找回） -->
-            <TextBlock Text="忘记 PIN？"
-                       Style="{StaticResource Type.CaptionSubtle}"
-                       Foreground="{StaticResource Fluent.AccentBrush}"
-                       Cursor="Hand"
-                       HorizontalAlignment="Center"
-                       AutomationProperties.Name="忘记 PIN 怎么办"
-                       Margin="0,24,0,0"
-                       MouseLeftButtonDown="ForgotPin_Click" />
+            <!-- 忘记 PIN 指引（轻量防护定位，不做应用内找回）。
+                 用 Button 而非纯 TextBlock：键盘用户可 Tab 聚焦、Enter 触发（F-P1-11 剩余项） -->
+            <Button HorizontalAlignment="Center"
+                    Margin="0,24,0,0"
+                    AutomationProperties.Name="忘记 PIN 怎么办"
+                    Click="ForgotPin_Click">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock Text="忘记 PIN？"
+                                   Style="{StaticResource Type.CaptionSubtle}"
+                                   Foreground="{StaticResource Fluent.AccentBrush}"
+                                   Cursor="Hand">
+                            <TextBlock.TextDecorations>
+                                <TextDecorationCollection>
+                                    <TextDecoration Location="Underline" />
+                                </TextDecorationCollection>
+                            </TextBlock.TextDecorations>
+                        </TextBlock>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
         </StackPanel>
     </Grid>
 </UserControl>

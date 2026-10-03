@@ -174,6 +174,12 @@
                             <Setter TargetName="TabBorder" Property="Effect" Value="{StaticResource Elevation.TabSelected}" />
                             <Setter Property="Foreground" Value="{StaticResource Fluent.TextPrimaryBrush}" />
                         </Trigger>
+                        <!-- 键盘焦点指示（F-P1-11 剩余项）：1px 强调色描边；
+                             置于 IsChecked 之后，焦点态的强调色描边优先于选中态的淡色描边 -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
+                            <Setter TargetName="TabBorder" Property="BorderThickness" Value="1" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -182,7 +188,9 @@
 
     <!-- 专属无底色纯净多行编辑器样式：融入便签贴纸底色 -->
     <Style x:Key="StickyEditorTextBoxStyle" TargetType="{x:Type TextBox}">
-        <Setter Property="KeyboardNavigation.TabNavigation" Value="None" />
+        <!-- 不再设置 KeyboardNavigation.TabNavigation=None：那会把编辑器从 Tab 链中整体剔除，
+             键盘用户永远无法用 Tab 进入正文（F-P1-11 剩余项）。
+             编辑器内部 Tab 仍插入制表符（AcceptsTab="True"），离开通道见 NoteWindow 的 Esc/Ctrl+Tab。 -->
         <Setter Property="AllowDrop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -230,6 +238,12 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="#30000000" />
                         </Trigger>
+                        <!-- 键盘焦点指示（F-P1-11 剩余项）：FocusVisualStyle 被置空后，
+                             键盘用户必须仍有可见的焦点反馈 —— 1px 强调色描边 -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="1" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -265,6 +279,11 @@
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource Fluent.DangerBrush}" />
                             <Setter Property="Foreground" Value="#FFFFFF" />
                         </Trigger>
+                        <!-- 键盘焦点指示（F-P1-11 剩余项）：1px 强调色描边 -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="1" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -298,6 +317,11 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="#1C000000" />
                         </Trigger>
+                        <!-- 键盘焦点指示（F-P1-11 剩余项）：1px 强调色描边 -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="1" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -330,6 +354,11 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="#24C42B1C" />
+                        </Trigger>
+                        <!-- 键盘焦点指示（F-P1-11 剩余项）：1px 强调色描边 -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
