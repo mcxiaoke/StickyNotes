@@ -352,4 +352,147 @@ public class ConcurrencyAndDecouplingTests
         using var m2 = new Mutex(true, testMutexName, out bool isNew2);
         Assert.IsFalse(isNew2, "二次尝试获取相同命名互斥量必须被拦截判定为已存在");
     }
+
+    /// <summary>
+    /// F-P1-7 验证：连续高频重调度（模拟用户快速输入）时，被取消的 CancellationTokenSource
+    /// 不得在使用中被释放 —— 复现原缺陷的关键是「上一个防抖任务仍停在 Task.Delay 上时，
+    /// 新一次调度就把它的 CTS Cancel + Dispose」，那会在 Task.Delay 内部抛 ObjectDisposedException，
+    /// 被通用 catch 误记为「自动保存失败」。
+    /// 本用例同时确保最终只有最后一次调度落盘（防抖语义不被破坏）。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P1_7_RapidRescheduling_DoesNotDisposeCtsInUse()
+    {
+        // 防抖窗口内反复重调度，确保旧任务必然还停在 Task.Delay 上就被取消
+        var repo = new CountingRepository();
+        var coordinator = new AutoSaveCoordinator(repo, debounceMilliseconds: 120);
+
+        var note = new Note { Id = Guid.NewGuid(), Content = "版本 0" };
+        var captured = new List<string>();
+        AppLog.DiagnosticSinkForTest = captured.Add;
+
+        try
+        {
+            for (int i = 1; i <= 40; i++)
+            {
+                note.Content = $"版本 {i}";
+                coordinator.ScheduleSave(note, n => repo.SaveAsync(n));
+                Thread.Sleep(2);
+            }
+
+            // 等待最后一次防抖到期并落盘
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (repo.SaveCallCount == 0 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20);
+            }
+        }
+        finally
+        {
+            AppLog.DiagnosticSinkForTest = null;
+        }
+
+        var reports = captured
+            .Where(line => line.Contains("自动保存失败", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.AreEqual(
+            0, reports.Count,
+            "被取消的 CTS 若在使用中被 Dispose，Task.Delay 会抛 ObjectDisposedException 并被通用 catch " +
+            "误记为「自动保存失败」（原 F-P1-7）。实际捕获到: " + string.Join(" | ", reports));
+
+        Assert.AreEqual(1, repo.SaveCallCount, "防抖应只落盘最后一次调度");
+        Assert.AreEqual("版本 40", repo.LastSavedContent, "落盘内容应为最后一次输入");
+
+        coordinator.Dispose();
+    }
+
+    /// <summary>
+    /// F-P1-7 验证：CancelPendingSave / FlushAsync / Dispose 之后，同一便签可继续正常重新调度，
+    /// 说明「释放权归持有任务」的重构没有破坏既有取消语义，也没有误删后续新调度。
+    /// </summary>
+    [TestMethod]
+    public async Task F_P1_7_CancelledScheduling_CanStillBeRescheduled()
+    {
+        var repo = new CountingRepository();
+        var coordinator = new AutoSaveCoordinator(repo, debounceMilliseconds: 200);
+
+        var note = new Note { Id = Guid.NewGuid(), Content = "第一次" };
+
+        // 1. 调度后立即取消：不应落盘
+        coordinator.ScheduleSave(note, n => repo.SaveAsync(n));
+        coordinator.CancelPendingSave(note.Id);
+        await Task.Delay(350);
+        Assert.AreEqual(0, repo.SaveCallCount, "被取消的调度不得落盘");
+
+        // 2. 取消后仍能重新调度并落盘（验证旧 CTS 释放策略未破坏重调度路径）
+        note.Content = "第二次";
+        coordinator.ScheduleSave(note, n => repo.SaveAsync(n));
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (repo.SaveCallCount == 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+        Assert.AreEqual(1, repo.SaveCallCount, "取消后重新调度应该正常落盘");
+        Assert.AreEqual("第二次", repo.LastSavedContent);
+
+        // 3. FlushAsync 走同一释放路径，之后仍可继续调度
+        note.Content = "第三次";
+        coordinator.ScheduleSave(note, n => repo.SaveAsync(n));
+        await coordinator.FlushAsync(note.Id);
+        Assert.AreEqual(2, repo.SaveCallCount, "FlushAsync 必须立即落盘");
+
+        // 4. Dispose 后再调度也不得抛异常（令牌只取消不释放，由持有任务收尾）
+        coordinator.Dispose();
+        note.Content = "第四次";
+        coordinator.ScheduleSave(note, n => repo.SaveAsync(n));
+        await Task.Delay(350);
+        Assert.AreEqual("第四次", repo.LastSavedContent, "Dispose 后重新调度仍应正常落盘");
+    }
+
+    /// <summary>
+    /// 统计落盘次数与最近一次落盘内容的测试替身。
+    /// </summary>
+    private sealed class CountingRepository : INoteRepository
+    {
+        private int _saveCallCount;
+        private string _lastSavedContent = string.Empty;
+
+        public int SaveCallCount => Volatile.Read(ref _saveCallCount);
+        public string LastSavedContent => Volatile.Read(ref _lastSavedContent);
+
+        public Task SaveAsync(Note note, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _saveCallCount);
+            Volatile.Write(ref _lastSavedContent, note.Content);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Note>> GetAllActiveAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(Array.Empty<Note>());
+
+        public Task<IReadOnlyList<Note>> GetAllArchivedAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(Array.Empty<Note>());
+
+        public Task<IReadOnlyList<Note>> GetAllAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Note>>(Array.Empty<Note>());
+
+        public Task<Note?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult<Note?>(null);
+
+        public Task SaveBatchAsync(IEnumerable<Note> notes, CancellationToken ct = default) =>
+            Task.WhenAll(notes.Select(n => SaveAsync(n, ct)));
+
+        public Task SoftDeleteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ArchiveNoteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RestoreNoteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task HardDeleteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ClearAllArchivedAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task UpdateWindowBoundsAsync(Guid id, double x, double y, double width, double height, bool isOpen, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task UpdateWindowPlacementAsync(Guid id, double x, double y, double width, double height, CancellationToken ct = default) =>
+            Task.CompletedTask;
+    }
 }

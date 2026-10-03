@@ -33,36 +33,39 @@ public sealed class AutoSaveCoordinator : IDisposable
     public void ScheduleSave(Note note, Func<Note, Task> saveAction)
     {
         var noteId = note.Id;
-
-        // 若已有未执行的延迟保存，取消旧计时器
-        if (_pendingTasks.TryGetValue(noteId, out var existing))
-        {
-            existing.Cts.Cancel();
-            existing.Cts.Dispose();
-        }
-
-        var cts = new CancellationTokenSource();
         var info = new SaveTaskInfo
         {
             Note = note,
             SaveAction = saveAction,
-            Cts = cts
+            Cts = new CancellationTokenSource()
         };
 
+        // 先登记新调度、再取消旧调度：新调度一旦入字典即为权威，旧任务随后被取消，
+        // 不会再进入落盘分支（它退出前会比对字典，发现已不是自己）。
+        var previous = _pendingTasks.TryGetValue(noteId, out var existingBefore) ? existingBefore : null;
         _pendingTasks[noteId] = info;
+        if (previous != null && !ReferenceEquals(previous, info))
+        {
+            // 只 Cancel、绝不 Dispose：该 CTS 的令牌此刻仍被旧延迟任务的 Task.Delay 注册，
+            // Dispose 会与之竞态（旧代码原 F-P1-7）。释放权归旧的持有任务，在其 finally 中执行。
+            CancelOnly(previous.Cts);
+        }
 
-        // 启动后台延迟任务
+        // 启动后台延迟任务（本任务是 cts 的持有者，唯一负责释放它）
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(_debounceMilliseconds, cts.Token);
-                if (!cts.IsCancellationRequested)
+                await Task.Delay(_debounceMilliseconds, info.Cts.Token);
+                if (info.Cts.IsCancellationRequested)
                 {
-                    if (_pendingTasks.TryRemove(noteId, out var taskInfo))
-                    {
-                        await taskInfo.SaveAction(taskInfo.Note);
-                    }
+                    return;
+                }
+
+                // 仅当字典里仍是自己的调度时才落盘，防止把后来的新调度误当成自己的
+                if (_pendingTasks.TryRemove(new KeyValuePair<Guid, SaveTaskInfo>(noteId, info)))
+                {
+                    await info.SaveAction(info.Note);
                 }
             }
             catch (OperationCanceledException)
@@ -72,6 +75,11 @@ public sealed class AutoSaveCoordinator : IDisposable
             catch (Exception ex)
             {
                 AppLog.Error($"[AutoSaveCoordinator] 自动保存失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 此刻 Task.Delay 已返回/已取消，令牌不再被使用，释放是安全的
+                DisposeQuietly(info.Cts);
             }
         });
     }
@@ -83,8 +91,7 @@ public sealed class AutoSaveCoordinator : IDisposable
     {
         if (_pendingTasks.TryRemove(noteId, out var info))
         {
-            info.Cts.Cancel();
-            info.Cts.Dispose();
+            CancelOnly(info.Cts);
         }
     }
 
@@ -95,15 +102,35 @@ public sealed class AutoSaveCoordinator : IDisposable
     {
         if (_pendingTasks.TryRemove(noteId, out var info))
         {
-            info.Cts.Cancel();
-            try
-            {
-                await info.SaveAction(info.Note);
-            }
-            finally
-            {
-                info.Cts.Dispose();
-            }
+            // 只取消、不释放：持有该 CTS 的延迟任务会在自身 finally 中释放
+            CancelOnly(info.Cts);
+            await info.SaveAction(info.Note);
+        }
+    }
+
+    /// <summary>
+    /// 取消令牌，绝不在此处释放 —— 令牌可能仍被延迟任务使用（原 F-P1-7 的核心约束）。
+    /// </summary>
+    private static void CancelOnly(CancellationTokenSource cts)
+    {
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已被持有任务释放（极端并发），无需处理
+        }
+    }
+
+    private static void DisposeQuietly(CancellationTokenSource cts)
+    {
+        try
+        {
+            cts.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
@@ -131,8 +158,8 @@ public sealed class AutoSaveCoordinator : IDisposable
         {
             try
             {
-                info.Cts.Cancel();
-                info.Cts.Dispose();
+                // 只取消；释放权归持有该 CTS 的延迟任务（原 F-P1-7）
+                CancelOnly(info.Cts);
 
                 if (_repository != null)
                 {
@@ -152,10 +179,11 @@ public sealed class AutoSaveCoordinator : IDisposable
 
     public void Dispose()
     {
+        // 只取消，不释放：每个 CTS 由持有它的延迟任务在 finally 中释放。
+        // 在此 Dispose 会让仍处于 Task.Delay 的令牌遭遇 ObjectDisposedException（原 F-P1-7）。
         foreach (var info in _pendingTasks.Values)
         {
-            info.Cts.Cancel();
-            info.Cts.Dispose();
+            CancelOnly(info.Cts);
         }
         _pendingTasks.Clear();
     }
