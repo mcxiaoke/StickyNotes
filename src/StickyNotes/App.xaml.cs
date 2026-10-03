@@ -16,7 +16,6 @@ namespace StickyNotes;
 /// </summary>
 public partial class App : Application
 {
-    private static Mutex? _instanceMutex;
     private IServiceProvider? _serviceProvider;
 
     /// <summary>
@@ -28,18 +27,6 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        // 1. 单实例互斥量保护（基于数据路径确定性 SHA256 哈希，防止 .NET 8 字符串哈希随机化导致单实例失效）
-        var mutexName = AppPaths.InstanceMutexName;
-        _instanceMutex = new Mutex(true, mutexName, out bool isNew);
-
-        if (!isNew)
-        {
-            // 广播唤醒已有实例并退出当前进程
-            NativeMethods.NotifyExistingInstance();
-            Shutdown();
-            return;
-        }
-
         base.OnStartup(e);
 
         // 2. 注册三层全局异常捕获，记录日志并安全刷盘，杜绝静默崩溃与数据丢失
@@ -173,8 +160,6 @@ public partial class App : Application
             disp.Dispose();
         }
 
-        _instanceMutex?.ReleaseMutex();
-        _instanceMutex?.Dispose();
         base.OnExit(e);
     }
 
