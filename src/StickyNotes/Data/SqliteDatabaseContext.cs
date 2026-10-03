@@ -63,11 +63,18 @@ public sealed class SqliteDatabaseContext
 
         if (currentVersion > TargetSchemaVersion)
         {
-            AppLog.Warn($"[SqliteDatabaseContext] 检测到数据库架构版本 (v{currentVersion}) 高于应用程序当前支持的版本 (v{TargetSchemaVersion})");
-            return;
+            AppLog.Error($"[SqliteDatabaseContext] 数据库架构版本 (v{currentVersion}) 高于应用程序支持的版本 (v{TargetSchemaVersion})，为保证数据安全已中止初始化");
+            throw new InvalidOperationException(
+                $"数据库架构版本 (v{currentVersion}) 高于当前应用支持的版本 (v{TargetSchemaVersion})。" +
+                "请升级应用，或从 backups/ 目录恢复一份匹配的备份后再启动。");
         }
 
         // 3. 执行 V1 初始建表迁移
+        // 注意「每个版本只做自己的事」：V1 建表**只包含** v1 时期的列（LiveNote 相关），
+        // IsPinnedInList / AlwaysOnTop 两列属于 V2，必须由 V2 迁移通过 ALTER 添加。
+        // 若 V1 建表就带上这两列，V2 的 ALTER TABLE ADD COLUMN 必然报「duplicate column name」，
+        // 只能靠 catch 掩盖，导致「新建库走 catch 路径、旧库升级走正常路径」两条不同代码路径
+        // 且测试只覆盖其中一条（原 F-P1-5）。
         if (currentVersion < 1)
         {
             await using var tx = connection.BeginTransaction();
@@ -79,8 +86,6 @@ public sealed class SqliteDatabaseContext
                     Content        TEXT NOT NULL DEFAULT '',
                     Color          INTEGER NOT NULL DEFAULT 0,
                     IsPinned       INTEGER NOT NULL DEFAULT 0,
-                    IsPinnedInList INTEGER NOT NULL DEFAULT 0,
-                    AlwaysOnTop    INTEGER NOT NULL DEFAULT 0,
                     IsDeleted      INTEGER NOT NULL DEFAULT 0,
                     WindowX        REAL NOT NULL DEFAULT 150,
                     WindowY        REAL NOT NULL DEFAULT 150,
@@ -94,47 +99,86 @@ public sealed class SqliteDatabaseContext
                 CREATE INDEX IF NOT EXISTS IX_Notes_IsDeleted ON Notes(IsDeleted);
                 CREATE INDEX IF NOT EXISTS IX_Notes_UpdatedAt ON Notes(UpdatedAt DESC);
                 CREATE INDEX IF NOT EXISTS IX_Notes_IsPinned ON Notes(IsPinned DESC);
-                CREATE INDEX IF NOT EXISTS IX_Notes_IsPinnedInList ON Notes(IsPinnedInList DESC);
 
                 PRAGMA user_version = 1;
                 """;
             await migrateCmd.ExecuteNonQueryAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
             currentVersion = 1;
+            AppLog.Info("[SqliteDatabaseContext] 已应用 Schema V1（基础建表）");
         }
 
         // 4. 执行 V2 迁移：拆分 IsPinnedInList 与 AlwaysOnTop 列
+        // 采用「先探测列是否存在、再决定是否 ALTER」的幂等写法，使以下两类库都走**同一条**代码路径：
+        //   a) 全新库 / 纯 v1 库：表内无这两列 → 执行 ALTER 补齐；
+        //   b) 历史遗留库：早期版本曾在 V1 建表时误带上这两列 → 跳过 ALTER，仅补数据与索引。
+        // 这样既不需要、也绝不允许用 catch 掩盖失败（原 F-P1-5）。
         if (currentVersion < 2)
         {
+            var existingColumns = await GetColumnNamesAsync(connection, cancellationToken);
+
             await using var tx = connection.BeginTransaction();
-            await using var migrateCmd = connection.CreateCommand();
-            migrateCmd.Transaction = tx;
-            migrateCmd.CommandText = """
-                -- 检查并安全增加 V2 拆分字段
-                ALTER TABLE Notes ADD COLUMN IsPinnedInList INTEGER NOT NULL DEFAULT 0;
-                ALTER TABLE Notes ADD COLUMN AlwaysOnTop INTEGER NOT NULL DEFAULT 0;
 
-                -- 从旧 IsPinned 继承并同步
-                UPDATE Notes SET IsPinnedInList = IsPinned, AlwaysOnTop = IsPinned;
+            if (!existingColumns.Contains("IsPinnedInList"))
+            {
+                await ExecuteAsync(connection, tx, "ALTER TABLE Notes ADD COLUMN IsPinnedInList INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+            }
 
-                CREATE INDEX IF NOT EXISTS IX_Notes_IsPinnedInList ON Notes(IsPinnedInList DESC);
-                PRAGMA user_version = 2;
-                """;
+            if (!existingColumns.Contains("AlwaysOnTop"))
+            {
+                await ExecuteAsync(connection, tx, "ALTER TABLE Notes ADD COLUMN AlwaysOnTop INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+            }
+
+            // 从旧 IsPinned 继承并同步（仅在首次补齐时才有意义，但重复执行结果一致，天然幂等）
+            await ExecuteAsync(connection, tx, "UPDATE Notes SET IsPinnedInList = IsPinned, AlwaysOnTop = IsPinned;", cancellationToken);
+            await ExecuteAsync(connection, tx, "CREATE INDEX IF NOT EXISTS IX_Notes_IsPinnedInList ON Notes(IsPinnedInList DESC);", cancellationToken);
+            await ExecuteAsync(connection, tx, "PRAGMA user_version = 2;", cancellationToken);
+
             try
             {
-                await migrateCmd.ExecuteNonQueryAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
-                // 若列已存在（如 V1 新建表已带列），直接提升 user_version 为 2
                 await tx.RollbackAsync(cancellationToken);
-                await using var fallbackCmd = connection.CreateCommand();
-                fallbackCmd.CommandText = "PRAGMA user_version = 2;";
-                await fallbackCmd.ExecuteNonQueryAsync(cancellationToken);
+                AppLog.Error($"[SqliteDatabaseContext] Schema V2 迁移提交失败，数据库保持 v{currentVersion} 未变更: {ex.Message}", ex);
+                throw new InvalidOperationException(
+                    $"数据库从 v{currentVersion} 升级到 v2 失败，已回滚且未修改版本号。原始错误：{ex.Message}", ex);
             }
 
-            AppLog.Info("[SqliteDatabaseContext] 成功升级数据库模式至 Schema V2");
+            AppLog.Info($"[SqliteDatabaseContext] 已应用 Schema V2（IsPinnedInList 补齐={!existingColumns.Contains("IsPinnedInList")}, AlwaysOnTop 补齐={!existingColumns.Contains("AlwaysOnTop")}）");
         }
+    }
+
+    /// <summary>
+    /// 读取 Notes 表现有列名（用于幂等迁移判断，避免靠 catch 掩盖 ALTER 失败）
+    /// </summary>
+    private static async Task<HashSet<string>> GetColumnNamesAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(Notes);";
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            // PRAGMA table_info 的第 2 列（索引 1）为列名
+            columns.Add(reader.GetString(1));
+        }
+
+        return columns;
+    }
+
+    private static async Task ExecuteAsync(
+        SqliteConnection connection,
+        System.Data.Common.DbTransaction tx,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = (SqliteTransaction)tx;
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }
