@@ -72,7 +72,7 @@ public sealed class TrayIconService : IDisposable
             cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.NOTIFYICONDATA>(),
             hWnd = _hwndSource.Handle,
             uID = TrayIconId,
-            uFlags = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP,
+            uFlags = NativeMethods.TrayNotifyIconFlags,
             uCallbackMessage = NativeMethods.WM_TRAYICON,
             hIcon = _hIcon,
             szTip = "StickyNotes 便签"
@@ -163,44 +163,87 @@ public sealed class TrayIconService : IDisposable
 
         if (msg == NativeMethods.WM_TRAYICON)
         {
-            int eventId = lParam.ToInt32();
-            if (eventId == NativeMethods.WM_LBUTTONUP || eventId == NativeMethods.WM_LBUTTONDBLCLK)
+            // 注意：v4 下事件码位于 LOWORD(lParam)，图标 ID 在 HIWORD(lParam)。
+            // 早期版本曾把 lParam 整体当事件码比较，导致所有分支都不命中、托盘完全无响应。
+            var kind = NativeMethods.ClassifyTrayEvent(lParam.ToInt32());
+
+            // 鼠标锚点坐标在 wParam（GET_X/Y_LPARAM）；键盘触发时为图标左上角。
+            // 不再用 ContextMenu.Placement=MousePoint：那依赖光标而非消息锚点，定位更不可靠。
+            int anchorX = NativeMethods.LowWord((int)wParam.ToInt64());
+            int anchorY = NativeMethods.HighWord((int)wParam.ToInt64());
+
+            switch (kind)
             {
-                WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
-                handled = true;
+                case NativeMethods.TrayEventKind.OpenList:
+                    WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
+                    handled = true;
+                    break;
+
+                case NativeMethods.TrayEventKind.ShowContextMenu:
+                    ShowContextMenu(anchorX, anchorY);
+                    handled = true;
+                    break;
             }
-            else if (eventId == NativeMethods.WM_RBUTTONUP || eventId == NativeMethods.WM_CONTEXTMENU)
+
+            return IntPtr.Zero;
+        }
+
+        // 实例唤醒消息必须由**本窗口**兜底处理（而不是只挂主列表窗口）：
+        // 主列表窗口在 --minimized/--autostart 启动路径下不会被 Show()，
+        // 因此它此刻没有 HWND，消息永远收不到；托盘隐藏窗口则始终存在。
+        // 早期实现只在 NotesListWindow.WndProc 里处理该消息，导致「已有实例在运行，
+        // 但再双击 exe 毫无反应」（用户必须结束进程再重开）。
+        if (msg == NativeMethods.WM_ACTIVATE_INSTANCE && NativeMethods.WM_ACTIVATE_INSTANCE != 0)
+        {
+            handled = true;
+
+            // 用 BeginInvoke 让消息处理即刻返回，避免在窗口过程里同步做窗口激活造成重入
+            var dispatcher = _hwndSource?.Dispatcher;
+            if (dispatcher != null)
             {
-                ShowContextMenu();
-                handled = true;
+                dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Normal,
+                    new Action(() => _windowManager.OpenOrActivateNotesListWindow()));
             }
+            else
+            {
+                _windowManager.OpenOrActivateNotesListWindow();
+            }
+
+            return IntPtr.Zero;
         }
 
         return IntPtr.Zero;
     }
 
-    private void ShowContextMenu()
+    private void ShowContextMenu(int anchorX, int anchorY)
     {
         if (_contextMenu == null || _hwndSource == null) return;
 
         NativeMethods.SetForegroundWindow(_hwndSource.Handle);
 
-        // 菜单关闭后必须主动发 WM_CANCELMODE 复位托盘图标状态，
-        // 否则图标会偶发保持"按下"的灰色高亮态（原 F-P1-8 第三宗毛病）。
+        // 菜单关闭后必须主动复位托盘图标状态，否则图标会偶发保持"按下"的灰色高亮态
+        // （原 F-P1-8 第三宗毛病）。
         _contextMenu.Closed -= ContextMenu_Closed;
         _contextMenu.Closed += ContextMenu_Closed;
 
-        _contextMenu.Placement = PlacementMode.MousePoint;
+        _contextMenu.Placement = PlacementMode.AbsolutePoint;
+        _contextMenu.HorizontalOffset = anchorX;
+        _contextMenu.VerticalOffset = anchorY;
         _contextMenu.IsOpen = true;
     }
 
     private void ContextMenu_Closed(object? sender, RoutedEventArgs e)
     {
         var handle = _hwndSource?.Handle ?? IntPtr.Zero;
-        if (handle != IntPtr.Zero)
+        if (handle == IntPtr.Zero)
         {
-            NativeMethods.PostMessage(handle, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+            return;
         }
+
+        // 复位图标状态，并向通知区域归还焦点（否则键盘用户关闭菜单后焦点会丢失）。
+        NativeMethods.PostMessage(handle, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+        NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_SETFOCUS, ref _nid);
     }
 
     public void Dispose()
