@@ -37,9 +37,11 @@ public sealed class SearchService : ISearchService
         var sortedKeywords = highlightKeywords.OrderByDescending(k => k.Length).ToList();
 
         var results = new List<SearchHit>();
+        int scannedNotes = 0;
 
         foreach (var note in notes.Where(n => !n.IsDeleted))
         {
+            scannedNotes++;
             var content = note.Content;
             if (string.IsNullOrEmpty(content)) continue;
 
@@ -168,7 +170,7 @@ public sealed class SearchService : ISearchService
         // 阈值参考产品文档 NFR（<30ms 达标）与本报告实测的退化拐点。
         if (sw.ElapsedMilliseconds >= 100)
         {
-            AppLog.Warn($"[SearchService] 搜索耗时偏高 {sw.ElapsedMilliseconds}ms（词=\"{trimmed}\"，扫描便签数={results.Count}，命中={results.Count}）");
+            AppLog.Warn($"[SearchService] 搜索耗时偏高 {sw.ElapsedMilliseconds}ms（词=\"{trimmed}\"，扫描便签数={scannedNotes}，命中={results.Count}）");
         }
 
         return results;

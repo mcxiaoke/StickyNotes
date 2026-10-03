@@ -681,7 +681,7 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
         }
         catch (Exception ex)
         {
-            AppLog.Warn($"[NotesListWindow] 保存主窗口位置失败: {ex.Message}", ex);
+            AppLog.Warn($"[NotesListWindow] 恢复主窗口位置失败: {ex.Message}", ex);
         }
     }
 
