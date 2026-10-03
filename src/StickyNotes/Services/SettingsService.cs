@@ -30,6 +30,26 @@ public sealed class AppSettings
     /// 开机自启时最小化到托盘
     /// </summary>
     public bool StartMinimized { get; set; } = true;
+
+    /// <summary>
+    /// 是否启用 PIN 锁定（防偷窥轻量保护，实际有效性以 PinHash/PinSalt 存在为准）
+    /// </summary>
+    public bool PinEnabled { get; set; }
+
+    /// <summary>
+    /// PIN 哈希盐（base64，16 字节随机值），为空表示未设置过 PIN
+    /// </summary>
+    public string PinSalt { get; set; } = string.Empty;
+
+    /// <summary>
+    /// PIN 的 PBKDF2-SHA256 哈希（base64），不存明文
+    /// </summary>
+    public string PinHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 列表窗口不在前台 N 分钟后自动关闭（0 表示不启用），下次打开时重新锁定
+    /// </summary>
+    public int ListAutoCloseMinutes { get; set; } = 10;
 }
 
 /// <summary>
@@ -86,6 +106,23 @@ public sealed class SettingsService
             if (Settings.StartMinimized != value)
             {
                 Settings.StartMinimized = value;
+                SaveSettings();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 列表窗口不在前台自动关闭的分钟数（0 = 不启用）
+    /// </summary>
+    public int ListAutoCloseMinutes
+    {
+        get => Settings.ListAutoCloseMinutes;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 120);
+            if (Settings.ListAutoCloseMinutes != clamped)
+            {
+                Settings.ListAutoCloseMinutes = clamped;
                 SaveSettings();
             }
         }

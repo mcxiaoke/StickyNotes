@@ -274,6 +274,88 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 分组: 隐私保护 (PIN 锁定 + 闲时自动收起) -->
+                <TextBlock Text="隐私保护"
+                           Style="{StaticResource Type.Subtitle}"
+                           Margin="0,0,0,8" />
+
+                <Border CornerRadius="{StaticResource CornerRadius.Card}"
+                        Background="{StaticResource Fluent.CardBgBrush}"
+                        BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Padding="{StaticResource Thickness.CardPadding}"
+                        Margin="0,0,0,16"
+                        Effect="{StaticResource Elevation.Card}">
+                    <StackPanel>
+                        <!-- 1. PIN 锁定 -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="PIN 锁定" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="{Binding PinStatusText}"
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- 未启用：显示启用按钮 -->
+                                <ui:Button Appearance="Primary"
+                                           Content="启用 PIN"
+                                           Padding="12,5"
+                                           FontWeight="SemiBold"
+                                           Command="{Binding EnablePinCommand}"
+                                           Visibility="{Binding IsPinEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+
+                                <!-- 已启用：显示修改与清除按钮 -->
+                                <StackPanel Orientation="Horizontal"
+                                            Visibility="{Binding IsPinEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <ui:Button Appearance="Secondary"
+                                               Content="修改 PIN"
+                                               Padding="12,5"
+                                               Margin="0,0,8,0"
+                                               Command="{Binding ChangePinCommand}" />
+                                    <ui:Button Appearance="Secondary"
+                                               Content="清除 PIN"
+                                               Padding="12,5"
+                                               Foreground="{StaticResource Fluent.DangerBrush}"
+                                               Command="{Binding ClearPinCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,12" />
+
+                        <!-- 2. 列表窗口闲时自动收起 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="列表窗口不在前台时自动关闭" Style="{StaticResource Type.BodyStrong}" />
+                                <TextBlock Text="管理中心窗口持续不在前台达到设定时间后自动收起，再次打开时需输入 PIN（若已启用）"
+                                           Style="{StaticResource Type.CaptionSubtle}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <ComboBox Grid.Column="1"
+                                      Width="150"
+                                      ItemsSource="{Binding AutoCloseOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedValuePath="Minutes"
+                                      SelectedValue="{Binding SelectedAutoCloseMinutes, Mode=TwoWay}"
+                                      VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- 分组 3: 关于与版本 -->
                 <TextBlock Text="关于"
                            Style="{StaticResource Type.Subtitle}"

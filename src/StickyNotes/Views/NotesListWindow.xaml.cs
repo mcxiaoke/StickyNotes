@@ -19,19 +19,63 @@ namespace StickyNotes.Views;
 public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 {
     private readonly SettingsService? _settingsService;
+    private readonly PinService? _pinService;
+
+    /// <summary>闲时自动关闭计时器：窗口持续不在前台达到设定分钟数后自动收起</summary>
+    private readonly DispatcherTimer _idleCloseTimer = new() { Interval = TimeSpan.FromMinutes(10) };
 
     public NotesListViewModel ViewModel => (NotesListViewModel)DataContext;
 
-    public NotesListWindow(NotesListViewModel viewModel, SettingsService? settingsService = null)
+    /// <summary>列表内容当前是否处于已解锁可见状态（供归档窗口判断是否需要初始锁定）</summary>
+    public bool IsContentAccessible => IsVisible && !PinOverlay.IsLocked;
+
+    public NotesListWindow(NotesListViewModel viewModel, SettingsService? settingsService = null, PinService? pinService = null)
     {
         InitializeComponent();
         DataContext = viewModel;
         _settingsService = settingsService;
+        _pinService = pinService;
+        PinOverlay.PinService = pinService;
 
         Loaded += async (_, _) =>
         {
             RestoreWindowPlacement();
+            // 初始锁定：启用 PIN 时窗口一打开即被遮罩覆盖
+            PinOverlay.IsLocked = _pinService?.IsPinEnabled ?? false;
             await ViewModel.LoadNotesAsync();
+        };
+
+        // 锁定规则：每次窗口从不可见变为可见（启动/托盘唤醒）都重新上锁
+        IsVisibleChanged += (s, e) =>
+        {
+            _idleCloseTimer.Stop();
+            if (e.NewValue is true && (_pinService?.IsPinEnabled ?? false))
+            {
+                PinOverlay.IsLocked = true;
+            }
+        };
+
+        // 闲时自动关闭：窗口失去前台即开始计时，回到前台停止；到点自动 Close（复用关闭到托盘逻辑）
+        _idleCloseTimer.Tick += (_, _) =>
+        {
+            _idleCloseTimer.Stop();
+            if (IsVisible && WindowState != WindowState.Minimized)
+            {
+                AppLog.Info("[NotesListWindow] 列表窗口长时间不在前台，自动收起到托盘");
+                Close();
+            }
+        };
+
+        Activated += (_, _) => _idleCloseTimer.Stop();
+        Deactivated += (_, _) =>
+        {
+            var minutes = _settingsService?.ListAutoCloseMinutes ?? 0;
+            if (minutes > 0 && IsVisible)
+            {
+                _idleCloseTimer.Interval = TimeSpan.FromMinutes(minutes);
+                _idleCloseTimer.Stop();
+                _idleCloseTimer.Start();
+            }
         };
 
         Closing += (s, e) =>
