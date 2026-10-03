@@ -147,18 +147,11 @@
                                         Cursor="Arrow">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Effect">
-                                                <Setter.Value>
-                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Direction="270" />
-                                                </Setter.Value>
-                                            </Setter>
+                                            <!-- 固定效果单例，禁止在 Trigger 内联重建（原 F-P2-22） -->
+                                            <Setter Property="Effect" Value="{StaticResource Elevation.CardSubtle}" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Effect">
-                                                        <Setter.Value>
-                                                            <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.10" Direction="270" />
-                                                        </Setter.Value>
-                                                    </Setter>
+                                                    <Setter Property="Effect" Value="{StaticResource Elevation.CardHoverLight}" />
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
