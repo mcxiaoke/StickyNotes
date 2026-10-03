@@ -37,7 +37,7 @@
             <!-- 当前 PIN（修改/清除模式显示） -->
             <TextBlock x:Name="CurrentPinLabel"
                        Text="当前 PIN"
-                       Style="{StaticResource Type.BodyStrong}"
+                       Style="{StaticResource Type.SettingTitle}"
                        Margin="0,0,0,4" />
             <PasswordBox x:Name="CurrentPinBox"
                          Height="34"
@@ -48,7 +48,7 @@
             <!-- 新 PIN（启用/修改模式显示） -->
             <TextBlock x:Name="NewPinLabel"
                        Text="新 PIN"
-                       Style="{StaticResource Type.BodyStrong}"
+                       Style="{StaticResource Type.SettingTitle}"
                        Margin="0,0,0,4" />
             <PasswordBox x:Name="NewPinBox"
                          Height="34"
@@ -58,7 +58,7 @@
 
             <TextBlock x:Name="ConfirmPinLabel"
                        Text="确认新 PIN"
-                       Style="{StaticResource Type.BodyStrong}"
+                       Style="{StaticResource Type.SettingTitle}"
                        Margin="0,0,0,4" />
             <PasswordBox x:Name="ConfirmPinBox"
                          Height="34"
@@ -90,7 +90,6 @@
                 <ui:Button Grid.Column="2"
                            Content="确定"
                            Appearance="Primary"
-                           FontWeight="SemiBold"
                            Padding="16,6"
                            IsDefault="True"
                            Click="OkButton_Click" />

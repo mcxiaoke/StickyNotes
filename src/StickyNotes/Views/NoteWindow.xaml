@@ -102,17 +102,16 @@
                                     BorderBrush="{StaticResource Fluent.SubtleBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource CornerRadius.Card}"
-                                    Padding="{StaticResource Thickness.CardPadding}"
+                                    Padding="8,8"
                                     Margin="4"
                                     Effect="{StaticResource Elevation.Popup}">
 
-                                <StackPanel Width="220">
-                                    <!-- 顶部提示 -->
+                                <StackPanel Width="224">
+                                    <!-- 顶部提示 (规范次要字阶，不加粗) -->
                                     <TextBlock Text="便签主题色彩"
                                                Style="{StaticResource Type.Caption}"
-                                               FontWeight="SemiBold"
                                                Foreground="{StaticResource Fluent.TextSecondaryBrush}"
-                                               Margin="2,0,0,8" />
+                                               Margin="4,2,0,8" />
 
                                     <!-- 7 色精美调色盘：带当前选中 Checkmark 勾选反馈 -->
                                     <WrapPanel HorizontalAlignment="Center">
@@ -208,28 +207,39 @@
                                         </Button>
                                     </WrapPanel>
 
-                                    <Separator Margin="0,10,0,6" Background="{StaticResource Fluent.SubtleBorderBrush}" />
+                                    <Separator Margin="0,8,0,6" Background="{StaticResource Fluent.SubtleBorderBrush}" />
 
-                                    <!-- 快捷跳转：便签列表 -->
-                                    <ui:Button Appearance="Transparent"
-                                               HorizontalAlignment="Stretch"
-                                               HorizontalContentAlignment="Left"
-                                               Icon="AppsListDetail20"
-                                               Content="便签列表 (Ctrl+H)"
-                                               FontSize="13"
-                                               Padding="8,6"
-                                               Click="ShowNotesList_Click" />
+                                    <!-- 快捷跳转：便签列表 (标准 Windows 11 Fluent 菜单项交互) -->
+                                    <Button Style="{StaticResource FluentFlyoutMenuItemStyle}"
+                                            Click="ShowNotesList_Click"
+                                            ToolTip="打开便签管理中心">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="22" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:SymbolIcon Symbol="AppsListDetail20" FontSize="15" Foreground="{StaticResource Fluent.TextPrimaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="便签列表" Style="{StaticResource Type.Body}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                            <TextBlock Grid.Column="2" Text="Ctrl+H" Style="{StaticResource Type.CaptionSubtle}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
 
-                                    <!-- 归档便签 -->
-                                    <ui:Button Appearance="Transparent"
-                                               HorizontalAlignment="Stretch"
-                                               HorizontalContentAlignment="Left"
-                                               Icon="Archive20"
-                                               Content="归档便签 (Ctrl+D)"
-                                               FontSize="13"
-                                               Padding="8,6"
-                                               Foreground="{StaticResource Fluent.DangerBrush}"
-                                               Click="DeleteButton_Click" />
+                                    <!-- 归档便签 (危险操作项：统一标准整行菜单) -->
+                                    <Button Style="{StaticResource FluentFlyoutDangerMenuItemStyle}"
+                                            Click="DeleteButton_Click"
+                                            ToolTip="归档此便签">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="22" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:SymbolIcon Symbol="Archive20" FontSize="15" Foreground="{StaticResource Fluent.DangerBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="归档便签" Style="{StaticResource Type.Body}" Foreground="{StaticResource Fluent.DangerBrush}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                            <TextBlock Grid.Column="2" Text="Ctrl+D" Style="{StaticResource Type.CaptionSubtle}" Foreground="{StaticResource Fluent.DangerBrush}" Opacity="0.8" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
                                 </StackPanel>
                             </Border>
                         </Popup>

@@ -90,7 +90,6 @@
                     <!-- 新建便签按钮 (Windows 11 Accent 胶囊) -->
                     <ui:Button Appearance="Primary"
                                Content="新建"
-                               FontWeight="SemiBold"
                                Height="32"
                                Padding="12,0"
                                ToolTip="新建一张便签 (Ctrl+N)"
@@ -120,40 +119,42 @@
 
             <!-- 1.3 分类筛选与状态信息栏 -->
             <Grid Grid.Row="2" Margin="0,0,0,10">
-                <!-- 非搜索状态：显示分类胶囊 Filter Chips 与右侧提示 -->
+                <!-- 非搜索状态：显示现代分段导航 Segmented Tabs 与右侧提示 -->
                 <Grid Visibility="{Binding IsSearching, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- 分类筛选胶囊群 -->
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <RadioButton x:Name="FilterAllRadio"
-                                     Style="{StaticResource FilterChipStyle}"
-                                     GroupName="NoteFilterGroup"
-                                     IsChecked="True"
-                                     Checked="FilterAllRadio_Checked">
-                            <TextBlock>
-                                <Run Text="全部" />
-                                <Run Text=" (" /><Run Text="{Binding Notes.Count, Mode=OneWay}" /><Run Text=")" />
-                            </TextBlock>
-                        </RadioButton>
-
-                        <RadioButton x:Name="FilterPinnedRadio"
-                                     Style="{StaticResource FilterChipStyle}"
-                                     GroupName="NoteFilterGroup"
-                                     Margin="6,0,0,0"
-                                     Checked="FilterPinnedRadio_Checked">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Pin16" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center" />
-                                <TextBlock VerticalAlignment="Center">
-                                    <Run Text="已置顶" />
-                                    <Run Text=" (" /><Run Text="{Binding PinnedNotesCount, Mode=OneWay}" /><Run Text=")" />
+                    <!-- Windows 11 标准分段标签容器 -->
+                    <Border Background="#09000000" CornerRadius="6" Padding="2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="FilterAllRadio"
+                                         Style="{StaticResource FilterChipStyle}"
+                                         GroupName="NoteFilterGroup"
+                                         IsChecked="True"
+                                         Checked="FilterAllRadio_Checked">
+                                <TextBlock>
+                                    <Run Text="全部" />
+                                    <Run Text=" (" /><Run Text="{Binding Notes.Count, Mode=OneWay}" /><Run Text=")" />
                                 </TextBlock>
-                            </StackPanel>
-                        </RadioButton>
-                    </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton x:Name="FilterPinnedRadio"
+                                         Style="{StaticResource FilterChipStyle}"
+                                         GroupName="NoteFilterGroup"
+                                         Margin="2,0,0,0"
+                                         Checked="FilterPinnedRadio_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Pin16" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                    <TextBlock VerticalAlignment="Center">
+                                        <Run Text="已置顶" />
+                                        <Run Text=" (" /><Run Text="{Binding PinnedNotesCount, Mode=OneWay}" /><Run Text=")" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </Border>
 
                     <!-- 右侧辅助提示 -->
                     <TextBlock Grid.Column="1"
@@ -193,7 +194,7 @@
                         </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type models:Note}">
-                                    <!-- 一体化高雅卡片：通体原色融合，自适应 1~4 行纯文本，支持悬浮上浮效果 -->
+                                    <!-- 一体化高雅卡片：通体原色融合，自适应 1~4 行纯文本 -->
                                     <Border Margin="0,0,0,10"
                                             CornerRadius="{StaticResource CornerRadius.Card}"
                                             Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
@@ -201,29 +202,19 @@
                                             BorderThickness="1"
                                             Padding="{StaticResource Thickness.CardPadding}"
                                             MouseLeftButtonDown="NoteCard_MouseLeftButtonDown">
-                                        <!-- 鼠标滑过微悬浮与立体阴影动效 -->
+                                        <!-- 鼠标滑过平滑柔和光影，无突兀跳动 -->
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Effect">
                                                     <Setter.Value>
-                                                        <DropShadowEffect BlurRadius="6" ShadowDepth="1.5" Opacity="0.08" Direction="270" />
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Setter Property="RenderTransform">
-                                                    <Setter.Value>
-                                                        <TranslateTransform Y="0" />
+                                                        <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Direction="270" />
                                                     </Setter.Value>
                                                 </Setter>
                                                 <Style.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
                                                         <Setter Property="Effect">
                                                             <Setter.Value>
-                                                                <DropShadowEffect BlurRadius="12" ShadowDepth="3" Opacity="0.18" Direction="270" />
-                                                            </Setter.Value>
-                                                        </Setter>
-                                                        <Setter Property="RenderTransform">
-                                                            <Setter.Value>
-                                                                <TranslateTransform Y="-1.5" />
+                                                                <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.10" Direction="270" />
                                                             </Setter.Value>
                                                         </Setter>
                                                     </Trigger>
@@ -252,92 +243,76 @@
                                             </ContextMenu>
                                         </Border.ContextMenu>
 
+                                        <!-- 卡片内容区：自然舒展排版 -->
                                         <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <!-- 左侧精致原色药丸条 (Accent Bar) -->
-                                                <ColumnDefinition Width="Auto" />
-                                                <!-- 核心内容区 -->
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <!-- 纯文本内容与操作栏 -->
+                                                <RowDefinition Height="*" />
+                                                <!-- 底部信息 -->
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
 
-                                            <!-- 左侧纵向色彩标识条 -->
-                                            <Border Grid.Column="0"
-                                                    Width="4"
-                                                    CornerRadius="{StaticResource CornerRadius.Pill}"
-                                                    Background="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
-                                                    Margin="0,2,10,2" />
+                                            <!-- 上部：纯文本（统一字体不加粗，自适应 1~4 行）与右上角操作区 -->
+                                            <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
 
-                                            <!-- 右侧卡片内容区 -->
-                                            <Grid Grid.Column="1">
-                                                <Grid.RowDefinitions>
-                                                    <!-- 纯文本内容与操作栏 -->
-                                                    <RowDefinition Height="*" />
-                                                    <!-- 底部信息 -->
-                                                    <RowDefinition Height="Auto" />
-                                                </Grid.RowDefinitions>
+                                                <!-- 纯文本正文：按需显示，最小一行，最多4行 -->
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding PreviewText}"
+                                                           Style="{StaticResource Type.Body}"
+                                                           FontWeight="Normal"
+                                                           FontSize="13"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           LineHeight="20"
+                                                           MaxHeight="80"
+                                                           VerticalAlignment="Top"
+                                                           Margin="0,0,8,0" />
 
-                                                <!-- 上部：纯文本（统一字体不加粗，自适应 1~4 行）与右上角操作区 -->
-                                                <Grid Grid.Row="0" Margin="0,0,0,6">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
+                                                <!-- 右侧图钉与更多操作 -->
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                                    <ui:SymbolIcon Symbol="Pin20"
+                                                                   FontSize="13"
+                                                                   Margin="0,3,4,0"
+                                                                   VerticalAlignment="Top"
+                                                                   Foreground="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
+                                                                   Visibility="{Binding IsPinnedInList, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                    <Button Style="{StaticResource StickyToolbarButtonStyle}"
+                                                            ToolTip="便签操作"
+                                                            Click="CardMoreButton_Click">
+                                                        <ui:SymbolIcon Symbol="MoreHorizontal20"
+                                                                       FontSize="14"
+                                                                       Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
 
-                                                    <!-- 纯文本正文：按需显示，最小一行，最多4行 -->
-                                                    <TextBlock Grid.Column="0"
-                                                               Text="{Binding PreviewText}"
-                                                               Style="{StaticResource Type.Body}"
-                                                               FontWeight="Normal"
-                                                               FontSize="13"
-                                                               Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
-                                                               TextWrapping="Wrap"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               LineHeight="20"
-                                                               MaxHeight="80"
-                                                               VerticalAlignment="Top"
-                                                               Margin="0,2,8,0" />
+                                            <!-- 底部时间戳与状态信息 -->
+                                            <Grid Grid.Row="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
 
-                                                    <!-- 右侧图钉与更多操作 -->
-                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                                                        <ui:SymbolIcon Symbol="Pin20"
-                                                                       FontSize="13"
-                                                                       Margin="0,3,4,0"
-                                                                       VerticalAlignment="Top"
-                                                                       Foreground="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
-                                                                       Visibility="{Binding IsPinnedInList, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                                        <Button Style="{StaticResource StickyToolbarButtonStyle}"
-                                                                ToolTip="便签操作"
-                                                                Click="CardMoreButton_Click">
-                                                            <ui:SymbolIcon Symbol="MoreHorizontal20"
-                                                                           FontSize="14"
-                                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}" />
-                                                        </Button>
-                                                    </StackPanel>
-                                                </Grid>
+                                                <!-- 字符统计微标签 -->
+                                                <TextBlock Grid.Column="0"
+                                                           Style="{StaticResource Type.CaptionSubtle}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                                                           VerticalAlignment="Center">
+                                                    <Run Text="{Binding Content.Length, Mode=OneWay}" /><Run Text=" 字符" />
+                                                </TextBlock>
 
-                                                <!-- 底部时间戳与状态信息 -->
-                                                <Grid Grid.Row="1">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <!-- 字符统计微标签 -->
-                                                    <TextBlock Grid.Column="0"
-                                                               Style="{StaticResource Type.CaptionSubtle}"
-                                                               Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
-                                                               VerticalAlignment="Center">
-                                                        <Run Text="{Binding Content.Length, Mode=OneWay}" /><Run Text=" 字符" />
-                                                    </TextBlock>
-
-                                                    <!-- 友好更新时间 -->
-                                                    <TextBlock Grid.Column="1"
-                                                               Style="{StaticResource Type.CaptionSubtle}"
-                                                               Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
-                                                               HorizontalAlignment="Right"
-                                                               VerticalAlignment="Center"
-                                                               Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}}" />
-                                                </Grid>
+                                                <!-- 友好更新时间 -->
+                                                <TextBlock Grid.Column="1"
+                                                           Style="{StaticResource Type.CaptionSubtle}"
+                                                           Foreground="{Binding Color, Converter={StaticResource NoteColorToSecondaryTextConverter}}"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Center"
+                                                           Text="{Binding UpdatedAt, Converter={StaticResource FriendlyDateTimeConverter}}" />
                                             </Grid>
                                         </Grid>
                                     </Border>

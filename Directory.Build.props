@@ -8,7 +8,7 @@
   <PropertyGroup>
     <Major>1</Major>
     <Minor>1</Minor>
-    <Patch>0</Patch>
+    <Patch>2</Patch>
     <VersionPrefix>$(Major).$(Minor).$(Patch)</VersionPrefix>
     <!-- 基准日：DaysSinceEpoch = today.Subtract(epoch).Days -->
     <FileVersionEpoch>2026-01-01</FileVersionEpoch>

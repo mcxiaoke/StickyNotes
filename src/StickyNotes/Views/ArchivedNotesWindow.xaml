@@ -147,55 +147,30 @@
                                         Cursor="Arrow">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="RenderTransform">
+                                            <Setter Property="Effect">
                                                 <Setter.Value>
-                                                    <TranslateTransform Y="0" />
+                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Direction="270" />
                                                 </Setter.Value>
                                             </Setter>
-                                            <Setter Property="Effect" Value="{StaticResource Elevation.Card}" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="RenderTransform">
-                                                        <Setter.Value>
-                                                            <TranslateTransform Y="-1.5" />
-                                                        </Setter.Value>
-                                                    </Setter>
                                                     <Setter Property="Effect">
                                                         <Setter.Value>
-                                                            <DropShadowEffect BlurRadius="12"
-                                                                              ShadowDepth="3"
-                                                                              Direction="270"
-                                                                              Color="#1E293B"
-                                                                              Opacity="0.16" />
+                                                            <DropShadowEffect BlurRadius="8" ShadowDepth="1.5" Opacity="0.10" Direction="270" />
                                                         </Setter.Value>
                                                     </Setter>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
+                                    <!-- 卡片信息区 -->
                                     <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <!-- 左侧原色药丸条 -->
-                                            <ColumnDefinition Width="Auto" />
-                                            <!-- 卡片内容主体 -->
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- 色彩指示条 -->
-                                        <Border Grid.Column="0"
-                                                Width="4"
-                                                CornerRadius="{StaticResource CornerRadius.Pill}"
-                                                Background="{Binding Color, Converter={StaticResource NoteColorToAccentConverter}}"
-                                                Margin="0,2,10,2" />
-
-                                        <!-- 卡片信息区 -->
-                                        <Grid Grid.Column="1">
-                                            <Grid.RowDefinitions>
-                                                <!-- 正文预览与快捷按钮 -->
-                                                <RowDefinition Height="Auto" />
-                                                <!-- 底部时间戳 -->
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <!-- 正文预览与快捷按钮 -->
+                                            <RowDefinition Height="Auto" />
+                                            <!-- 底部时间戳 -->
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
                                             <!-- 正文预览行与右侧操作按钮 -->
                                             <Grid Grid.Row="0">
@@ -263,8 +238,7 @@
                                                 </TextBlock>
                                             </Grid>
                                         </Grid>
-                                    </Grid>
-                                </Border>
+                                    </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
