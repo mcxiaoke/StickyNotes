@@ -20,6 +20,13 @@ public sealed class WindowManager
     private SettingsWindow? _settingsWindow;
     private bool _isShuttingDown;
 
+    /// <summary>
+    /// IsOpen/坐标写入串行闸：保证同一便签的「打开写 IsOpen=true」与「关闭写 IsOpen=false」
+    /// 严格按时间先后落地。两条写入各自走独立数据库连接，若无此闸，快速打开后立即关闭时
+    /// 打开写入可能后落地，把用户已关闭的便签在下次启动时错误复活（N-3）。
+    /// </summary>
+    private readonly SemaphoreSlim _placementWriteGate = new(1, 1);
+
     public WindowManager(IServiceProvider serviceProvider, INoteRepository repository)
     {
         _serviceProvider = serviceProvider;
@@ -62,10 +69,17 @@ public sealed class WindowManager
         }
         else
         {
-            // 屏幕工作区保护（防止拔掉显示器后窗口移出视野）
-            var workArea = SystemParameters.WorkArea;
-            if (note.WindowX + 50 > workArea.Right || note.WindowY + 50 > workArea.Bottom ||
-                note.WindowX + note.WindowWidth < workArea.Left || note.WindowY < workArea.Top)
+            // 屏幕边界保护（防止拔掉显示器后窗口移出视野）。
+            // 必须用**虚拟桌面**（全部显示器的并集）判断，不能用 SystemParameters.WorkArea ——
+            // 那只是主显示器的工作区，副屏上的便签会被误判越界，在每次启动恢复/重开时
+            // 被强制搬回主屏，丢失用户手工摆放的桌面布局（N-1）。
+            double vLeft = SystemParameters.VirtualScreenLeft;
+            double vTop = SystemParameters.VirtualScreenTop;
+            double vRight = vLeft + SystemParameters.VirtualScreenWidth;
+            double vBottom = vTop + SystemParameters.VirtualScreenHeight;
+
+            if (note.WindowX + 50 > vRight || note.WindowY + 50 > vBottom ||
+                note.WindowX + note.WindowWidth < vLeft || note.WindowY < vTop)
             {
                 var (safeLeft, safeTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
                 note.WindowX = safeLeft;
@@ -108,14 +122,23 @@ public sealed class WindowManager
 
             try
             {
-                await _repository.UpdateWindowBoundsAsync(
-                    note.Id,
-                    window.Left,
-                    window.Top,
-                    window.ActualWidth > 0 ? window.ActualWidth : window.Width,
-                    window.ActualHeight > 0 ? window.ActualHeight : window.Height,
-                    isOpen: false
-                );
+                // 与「打开写 IsOpen=true」共用写闸（N-3），保证关闭写入不会越过仍的在途打开写入
+                await _placementWriteGate.WaitAsync();
+                try
+                {
+                    await _repository.UpdateWindowBoundsAsync(
+                        note.Id,
+                        window.Left,
+                        window.Top,
+                        window.ActualWidth > 0 ? window.ActualWidth : window.Width,
+                        window.ActualHeight > 0 ? window.ActualHeight : window.Height,
+                        isOpen: false
+                    );
+                }
+                finally
+                {
+                    _placementWriteGate.Release();
+                }
 
                 AppLog.Info($"[WindowManager] 用户关闭便签 {note.Id}，已写入 IsOpen=false");
             }
@@ -144,12 +167,20 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 便签窗口打开时写入 IsOpen = true（不阻塞 UI，失败仅记日志）
+    /// 便签窗口打开时写入 IsOpen = true（不阻塞 UI，失败仅记日志）。
+    /// 与「用户主动关闭写 false」共用 <see cref="_placementWriteGate"/> 串行闸（N-3）；
+    /// 若窗口在写入生效前已被用户关闭（不在激活池），则放弃本次写入，把最终状态让给关闭写入。
     /// </summary>
     private async Task PersistIsOpenOnOpenAsync(Note note)
     {
+        await _placementWriteGate.WaitAsync();
         try
         {
+            if (!_activeNoteWindows.ContainsKey(note.Id))
+            {
+                return;
+            }
+
             await _repository.UpdateWindowBoundsAsync(
                 note.Id,
                 note.WindowX,
@@ -161,6 +192,10 @@ public sealed class WindowManager
         catch (Exception ex)
         {
             AppLog.Warn($"[WindowManager] 打开便签 {note.Id} 时写入 IsOpen=true 失败: {ex.Message}", ex);
+        }
+        finally
+        {
+            _placementWriteGate.Release();
         }
     }
 
@@ -384,7 +419,12 @@ public sealed class WindowManager
     /// </summary>
     public (double Left, double Top) CalculateSmartRightPlacement(double windowWidth, double windowHeight)
     {
-        var workArea = SystemParameters.WorkArea;
+        // 边界约束使用虚拟桌面（全部显示器并集）：主窗口本身可能就在副屏，
+        // 若按主屏 WorkArea 收敛，跟随主窗口的新便签会被拽回主屏（N-1）。
+        double vLeft = SystemParameters.VirtualScreenLeft;
+        double vTop = SystemParameters.VirtualScreenTop;
+        double vRight = vLeft + SystemParameters.VirtualScreenWidth;
+        double vBottom = vTop + SystemParameters.VirtualScreenHeight;
         double mainLeft = 100;
         double mainTop = 100;
         double mainWidth = 480;
@@ -400,12 +440,12 @@ public sealed class WindowManager
         // 默认放置在主窗口右侧，留 14px 间隙
         double startX = mainLeft + mainWidth + 14;
         // 如果右侧屏幕放不下，则自适应尝试主窗口左侧或靠屏幕右边缘
-        if (startX + windowWidth > workArea.Right)
+        if (startX + windowWidth > vRight)
         {
             startX = mainLeft - windowWidth - 14;
-            if (startX < workArea.Left)
+            if (startX < vLeft)
             {
-                startX = Math.Max(workArea.Left + 10, workArea.Right - windowWidth - 20);
+                startX = Math.Max(vLeft + 10, vRight - windowWidth - 20);
             }
         }
 
@@ -418,10 +458,10 @@ public sealed class WindowManager
         double targetTop = mainTop + offsetY;
 
         // 屏幕边界保护
-        if (targetX + windowWidth > workArea.Right)
-            targetX = Math.Max(workArea.Left + 10, workArea.Right - windowWidth - 10);
-        if (targetTop + windowHeight > workArea.Bottom)
-            targetTop = Math.Max(workArea.Top + 10, workArea.Bottom - windowHeight - 20);
+        if (targetX + windowWidth > vRight)
+            targetX = Math.Max(vLeft + 10, vRight - windowWidth - 10);
+        if (targetTop + windowHeight > vBottom)
+            targetTop = Math.Max(vTop + 10, vBottom - windowHeight - 20);
 
         return (targetX, targetTop);
     }
