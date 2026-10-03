@@ -8,7 +8,6 @@ namespace StickyNotes.Infrastructure;
 /// </summary>
 internal static class NativeMethods
 {
-    public const int HWND_BROADCAST = 0xffff;
     public const int SW_RESTORE = 9;
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
@@ -28,11 +27,8 @@ internal static class NativeMethods
 
     public static readonly int WM_ACTIVATE_INSTANCE = RegisterWindowMessage("StickyNotes_Activate_MainWindow");
 
-    /// <summary>
-    /// 由 explorer.exe 在任务栏（重新）创建后广播的系统消息。托盘图标必须监听它，
-    /// 否则用户重启 explorer 后图标永久消失，只能重启应用（原 F-P1-8）。
-    /// </summary>
-    public static readonly int WM_TASKBAR_CREATED = RegisterWindowMessage("TaskbarCreated");
+    // 说明：托盘图标已整体迁移到 H.NotifyIcon.Wpf（TaskbarIcon）托管，TaskbarCreated 的监听
+    // 与重建由该库内部完成；本项目不再保留任何手写 Shell_NotifyIcon 互操作（N-9 清理）。
 
     /// <summary>
     /// 唤醒已在运行的实例：把注册消息**定向**投递给本应用的**全部**顶层窗口。
@@ -188,168 +184,6 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-    #endregion
-
-    #region 任务栏托盘 (Shell_NotifyIcon)
-    public const int WM_USER = 0x0400;
-    public const int WM_TRAYICON = WM_USER + 101;
-
-    public const int WM_LBUTTONUP = 0x0202;
-    public const int WM_LBUTTONDBLCLK = 0x0203;
-    public const int WM_RBUTTONUP = 0x0205;
-    public const int WM_CONTEXTMENU = 0x007B;
-
-    public const int NIM_ADD = 0x00000000;
-    public const int NIM_MODIFY = 0x00000001;
-    public const int NIM_DELETE = 0x00000002;
-    public const int NIM_SETVERSION = 0x00000004;
-
-    /// <summary>NOTIFYICON_VERSION_4：启用 Win10/11 图标区布局与 WM_CONTEXTMENU 语义</summary>
-    public const int NOTIFYICON_VERSION_4 = 4;
-
-    /// <summary>菜单关闭后需要主动复位托盘图标状态，否则偶发保持"按下"灰态</summary>
-    public const int WM_CANCELMODE = 0x001F;
-
-    /// <summary>
-    /// 无操作消息。用于托盘菜单关闭后把前台身份干净地交还给系统
-    /// （经典托盘菜单收尾写法），避免 Shell 继续停留在菜单模式。
-    /// </summary>
-    public const int WM_NULL = 0x0000;
-
-    /// <summary>把焦点还给任务栏通知区域（菜单关闭/按 ESC 取消后应调用）</summary>
-    public const int NIM_SETFOCUS = 0x00000003;
-
-    /// <summary>
-    /// NOTIFYICON_VERSION_4 下的「图标被选中/激活」事件码。
-    /// 鼠标左键单击、以及键盘空格/回车激活通知图标时，Shell 发送本事件而非 WM_LBUTTONUP。
-    /// </summary>
-    public const int NIN_SELECT = WM_USER + 0;   // 0x0400
-
-    /// <summary>NOTIFYICON_VERSION_4 下键盘激活通知图标的事件码</summary>
-    public const int NIN_KEYSELECT = WM_USER + 1; // 0x0401
-
-    /// <summary>托盘图标事件分类（由原始 lParam 解析得到）</summary>
-    public enum TrayEventKind
-    {
-        /// <summary>与托盘无关或未知事件，应忽略</summary>
-        None = 0,
-
-        /// <summary>左键单击/双击或键盘激活 → 唤醒主列表</summary>
-        OpenList,
-
-        /// <summary>右键或键盘菜单键 → 弹出上下文菜单</summary>
-        ShowContextMenu
-    }
-
-    /// <summary>
-    /// 从 WM_TRAYICON 的 lParam 解析托盘事件类型。
-    /// </summary>
-    /// <remarks>
-    /// **必须用 LOWORD(lParam) 取事件码，绝不能把 lParam 整体当事件码比较。**
-    /// 在 NOTIFYICON_VERSION_4 下，Shell 的解码规则变为：
-    /// <list type="bullet">
-    ///   <item><c>LOWORD(lParam)</c> = 通知事件（NIN_SELECT / NIN_KEYSELECT / WM_CONTEXTMENU / 鼠标消息）</item>
-    ///   <item><c>HIWORD(lParam)</c> = 图标 ID（本项目的 TrayIconId，非 0）</item>
-    /// </list>
-    /// 因此 lParam 实际形如 <c>0x03E9_0400</c>；若直接与 <c>0x0400</c> 或 <c>0x007B</c> 比较，
-    /// 所有分支都不会命中，表现为「托盘图标在、但左右键和双击全部无反应」。
-    /// 来源：Microsoft Learn，NOTIFYICONDATA 结构的 uCallbackMessage 说明。
-    /// </remarks>
-    internal static TrayEventKind ClassifyTrayEvent(int lParam)
-    {
-        int eventCode = LowWord(lParam);
-
-        return eventCode switch
-        {
-            // v4 语义：左键/键盘激活
-            NIN_SELECT or NIN_KEYSELECT => TrayEventKind.OpenList,
-            // v4 语义：右键 或 键盘菜单键（文档明确：鼠标右键与菜单键都发 WM_CONTEXTMENU）
-            WM_CONTEXTMENU => TrayEventKind.ShowContextMenu,
-            // 兼容旧版（未成功 SETVERSION）与鼠标消息直传的情形
-            WM_LBUTTONUP or WM_LBUTTONDBLCLK => TrayEventKind.OpenList,
-            WM_RBUTTONUP => TrayEventKind.ShowContextMenu,
-            _ => TrayEventKind.None
-        };
-    }
-
-    /// <summary>取 16 位低字（事件码所在位段）</summary>
-    internal static int LowWord(int value) => value & 0xFFFF;
-
-    /// <summary>取 16 位高字（图标 ID 所在位段）</summary>
-    internal static int HighWord(int value) => (value >> 16) & 0xFFFF;
-
-    /// <summary>
-    /// 托盘 NOTIFYICONDATA 的 uFlags。
-    /// 必须包含 <see cref="NIF_SHOWTIP"/>：当 uVersion 为 NOTIFYICON_VERSION_4 时，
-    /// 标准 tooltip 默认被抑制（留给应用自绘富弹窗），不加此标志用户就看不到托盘提示文字。
-    /// </summary>
-    internal const int TrayNotifyIconFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-
-    public const int NIF_MESSAGE = 0x00000001;
-    public const int NIF_ICON = 0x00000002;
-    public const int NIF_TIP = 0x00000004;
-    public const int NIF_STATE = 0x00000008;
-    public const int NIF_INFO = 0x00000010;
-    public const int NIF_GUID = 0x00000020;
-    public const int NIF_SHOWTIP = 0x00000080;
-
-    public const int NIIF_NONE = 0x00000000;
-    public const int NIIF_INFO = 0x00000001;
-    public const int NIIF_WARNING = 0x00000002;
-    public const int NIIF_ERROR = 0x00000003;
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    public struct NOTIFYICONDATA
-    {
-        public int cbSize;
-        public IntPtr hWnd;
-        public int uID;
-        public int uFlags;
-        public int uCallbackMessage;
-        public IntPtr hIcon;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string szTip;
-        public int dwState;
-        public int dwStateMask;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
-        public string szInfo;
-        public int uTimeoutOrVersion;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
-        public string szInfoTitle;
-        public int dwInfoFlags;
-        public Guid guidItem;
-        public IntPtr hBalloonIcon;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool Shell_NotifyIcon(int dwMessage, ref NOTIFYICONDATA lpData);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
-    public static extern IntPtr ExtractIcon(IntPtr hInst, string lpszExeFileName, int nIconIndex);
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
-
-    public static readonly IntPtr IDI_APPLICATION = (IntPtr)32512;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern IntPtr CopyIcon(IntPtr hIcon);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool DestroyIcon(IntPtr hIcon);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool GetCursorPos(out POINT lpPoint);
     #endregion
 
     #region 内存优化与工作集修剪 (Working Set Trimming)

@@ -463,87 +463,6 @@ public class LifecycleAndReliabilityTests
     }
 
     /// <summary>
-    /// F-P1-8 验证：托盘图标必须声明使用 NOTIFYICON_VERSION_4，否则停留"旧式"形态，
-    /// 不参与 Win10/11 图标区布局。
-    /// </summary>
-    [TestMethod]
-    public void F_P1_8_TrayIcon_DeclaresVersion4()
-    {
-        Assert.AreEqual(0x00000004, NativeMethods.NIM_SETVERSION, "NIM_SETVERSION 常量必须为 4");
-        Assert.AreEqual(4, NativeMethods.NOTIFYICON_VERSION_4, "必须声明 NOTIFYICON_VERSION_4");
-    }
-
-    /// <summary>
-    /// 回归：NOTIFYICON_VERSION_4 下事件码位于 LOWORD(lParam)、图标 ID 位于 HIWORD(lParam)。
-    /// 早期版本把 lParam 整体当事件码比较（0x03E90400 vs 0x0400/0x007B），
-    /// 所有分支都不命中 → 托盘图标在但左右键、双击全部无反应。
-    /// 本用例用「带非零图标 ID 的真实 lParam」锁定：
-    ///   1. 未做位段解析时必然无法命中（防止退回 lParam 整体比较）；
-    ///   2. v4 语义下左键/键盘激活 = NIN_SELECT/NIN_KEYSELECT，右键 = WM_CONTEXTMENU。
-    /// </summary>
-    [TestMethod]
-    public void F_P1_8_TrayEventCode_MustBeDecodedFromLowWord()
-    {
-        const int trayIconId = 1001; // 与 TrayIconService.TrayIconId 一致
-
-        // Shell 在 v4 下实际投递的 lParam：LOWORD = 事件码，HIWORD = 图标 ID
-        int selectLParam = (trayIconId << 16) | NativeMethods.NIN_SELECT;
-        int keySelectLParam = (trayIconId << 16) | NativeMethods.NIN_KEYSELECT;
-        int contextMenuLParam = (trayIconId << 16) | NativeMethods.WM_CONTEXTMENU;
-
-        // 先证明"不解析位段就会全盘不命中"——这是原缺陷的机理
-        Assert.AreNotEqual(NativeMethods.NIN_SELECT, selectLParam,
-            "整体 lParam 不可能等于裸事件码（这正是原缺陷：拿 lParam 直接比较）");
-        Assert.AreNotEqual(NativeMethods.WM_CONTEXTMENU, contextMenuLParam,
-            "整体 lParam 不可能等于裸事件码");
-
-        // 再锁定正确解析结果
-        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
-            NativeMethods.ClassifyTrayEvent(selectLParam),
-            "v4 下左键单击（NIN_SELECT）必须被识别为「唤醒列表」");
-        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
-            NativeMethods.ClassifyTrayEvent(keySelectLParam),
-            "v4 下键盘激活（NIN_KEYSELECT）必须被识别为「唤醒列表」");
-        Assert.AreEqual(NativeMethods.TrayEventKind.ShowContextMenu,
-            NativeMethods.ClassifyTrayEvent(contextMenuLParam),
-            "v4 下右键必须被识别为「弹出菜单」（文档：鼠标右键与键盘菜单键都发 WM_CONTEXTMENU）");
-
-        // 兼容旧版 / 鼠标消息直传的路径
-        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
-            NativeMethods.ClassifyTrayEvent(NativeMethods.WM_LBUTTONUP));
-        Assert.AreEqual(NativeMethods.TrayEventKind.OpenList,
-            NativeMethods.ClassifyTrayEvent(NativeMethods.WM_LBUTTONDBLCLK));
-        Assert.AreEqual(NativeMethods.TrayEventKind.ShowContextMenu,
-            NativeMethods.ClassifyTrayEvent(NativeMethods.WM_RBUTTONUP));
-
-        // 与托盘无关的消息必须被忽略（例如 WM_MOUSEMOVE 悬停、0）
-        Assert.AreEqual(NativeMethods.TrayEventKind.None, NativeMethods.ClassifyTrayEvent(0));
-        Assert.AreEqual(NativeMethods.TrayEventKind.None,
-            NativeMethods.ClassifyTrayEvent((trayIconId << 16) | 0x0200), "WM_MOUSEMOVE 不应触发任何动作");
-    }
-
-    /// <summary>
-    /// 回归：NOTIFYICON_VERSION_4 会抑制标准 tooltip，必须额外声明 NIF_SHOWTIP，
-    /// 否则托盘图标不再显示提示文字（用户在"旧式"版本里本来能看到）。
-    /// </summary>
-    [TestMethod]
-    public void F_P1_8_TrayIconFlags_KeepStandardTooltipUnderV4()
-    {
-        Assert.IsTrue(
-            (NativeMethods.TrayNotifyIconFlags & NativeMethods.NIF_SHOWTIP) != 0,
-            "v4 下必须声明 NIF_SHOWTIP，否则标准托盘提示被抑制、用户看不到提示文字");
-
-        foreach (var required in new[]
-                 {
-                     NativeMethods.NIF_MESSAGE, NativeMethods.NIF_ICON, NativeMethods.NIF_TIP
-                 })
-        {
-            Assert.IsTrue((NativeMethods.TrayNotifyIconFlags & required) != 0,
-                $"托盘 uFlags 必须仍包含必要标志 0x{required:X}（回调消息/图标/提示）");
-        }
-    }
-
-    /// <summary>
     /// 回归：唤醒已运行实例必须投递**全部**本进程顶层窗口，不得命中第一个就停止枚举。
     /// EnumWindows 按 z 序返回，第一个本进程窗口常常是只处理托盘消息的隐藏 helper 窗口；
     /// 若提前 return，唤醒消息会被丢弃，表现为「已有实例在运行，但再双击 exe 毫无反应」。
@@ -601,23 +520,6 @@ public class LifecycleAndReliabilityTests
                 second.Dispose();
             }
         });
-    }
-
-    /// <summary>
-    /// F-P1-8 验证：必须监听 explorer.exe 在任务栏重建后广播的 TaskbarCreated 注册消息，
-    /// 否则用户重启/刷新 explorer 后托盘图标永久消失，只能重启应用。
-    /// </summary>
-    [TestMethod]
-    public void F_P1_8_TaskbarCreatedMessage_IsRegistered()
-    {
-        Assert.AreNotEqual(
-            0, NativeMethods.WM_TASKBAR_CREATED,
-            "必须成功注册 TaskbarCreated 消息（托盘图标据此在 explorer 重启后自我恢复）");
-
-        // 与 WM_ACTIVATE_INSTANCE 必须是两个不同的注册消息，避免消息语义串台
-        Assert.AreNotEqual(
-            NativeMethods.WM_ACTIVATE_INSTANCE, NativeMethods.WM_TASKBAR_CREATED,
-            "TaskbarCreated 与实例激活消息不得共用同一个消息 ID");
     }
 
     /// <summary>
@@ -847,60 +749,6 @@ public class LifecycleAndReliabilityTests
     }
 
     /// <summary>
-    /// 回归（用户实际反馈）：点托盘菜单项后，任务栏「展开图标」被白框框住并提示
-    /// 「显示隐藏的图标」。原因是旧版手写代码在菜单关闭时误用了 <c>NIM_SETFOCUS</c>，
-    /// 它把整个任务栏变成前台窗口。
-    /// 现已彻底改用成熟的 H.NotifyIcon.Wpf（TaskbarIcon）托管控件，
-    /// 彻底消除手写 Shell_NotifyIcon 与 NIM_SETFOCUS 焦点争抢。
-    /// 本用例锁定：托盘服务使用 TaskbarIcon，不调用 NIM_SETFOCUS，也不包含原生 Shell_NotifyIcon。
-    /// </summary>
-    [TestMethod]
-    public void F_P1_8_TrayIcon_DoesNotStealFocusFromShell()
-    {
-        var sourcePath = FindRepositoryFile(
-            Path.Combine("src", "StickyNotes", "Services", "TrayIconService.cs"));
-
-        var text = File.ReadAllText(sourcePath);
-
-        // 只检查有效代码：注释里为说明原因会提到 NIM_SETFOCUS，不应算作调用
-        var codeLines = text
-            .Split('\n')
-            .Select(line =>
-            {
-                var trimmed = line.TrimStart();
-                var commentIndex = line.IndexOf("//", StringComparison.Ordinal);
-                return trimmed.StartsWith("//", StringComparison.Ordinal) || commentIndex < 0
-                    ? (trimmed.StartsWith("//", StringComparison.Ordinal) ? string.Empty : line)
-                    : line[..commentIndex];
-            });
-
-        var effectiveCode = string.Join('\n', codeLines);
-
-        Assert.IsFalse(
-            effectiveCode.Contains("NIM_SETFOCUS", StringComparison.Ordinal),
-            "TrayIconService 不得调用 NIM_SETFOCUS：它会把焦点交给整个任务栏，"
-            + "导致通知区域图标出现焦点白框与「显示隐藏的图标」提示");
-
-        Assert.IsTrue(
-            effectiveCode.Contains("TaskbarIcon", StringComparison.Ordinal),
-            "TrayIconService 必须使用成熟的 TaskbarIcon 控件接管托盘");
-
-        Assert.IsFalse(
-            effectiveCode.Contains("Shell_NotifyIcon", StringComparison.Ordinal),
-            "TrayIconService 不得再使用手写的 Shell_NotifyIcon Win32 调用，由 TaskbarIcon 统一托管");
-    }
-
-    /// <summary>
-    /// F-P1-8 验证：右键菜单关闭仅需 WM_CANCELMODE 复位图标状态，
-    /// 用于消除「图标偶发保持按下灰态」。
-    /// </summary>
-    [TestMethod]
-    public void F_P1_8_ContextMenuClose_PostsCancelMode()
-    {
-        Assert.AreEqual(0x001F, NativeMethods.WM_CANCELMODE, "WM_CANCELMODE 常量必须为 0x001F");
-    }
-
-    /// <summary>
     /// 验证现代 H.NotifyIcon.TaskbarIcon 托盘服务初始化与释放行为：
     /// 确保 TaskbarIcon 正确配置 ToolTipText、MenuActivation、ContextMenu，且 Dispose 时安全清理。
     /// </summary>
@@ -924,24 +772,5 @@ public class LifecycleAndReliabilityTests
             trayService.Dispose();
             Assert.IsNull(trayService.TaskbarIconForTest, "Dispose 后 TaskbarIcon 必须被置空并释放");
         });
-    }
-
-    /// <summary>
-    /// 由测试程序集位置向上回溯定位仓库内的源码文件（与截图测试相同的目录布局约定）。
-    /// </summary>
-    private static string FindRepositoryFile(string relativePath)
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, relativePath);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-            dir = dir.Parent;
-        }
-
-        throw new FileNotFoundException($"未能在仓库中找到源文件: {relativePath}");
     }
 }
