@@ -133,27 +133,65 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 归档卡片列表 -->
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              Visibility="{Binding HasNoNotes, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                    <ItemsControl ItemsSource="{Binding FilteredNotes}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:Note}">
-                                <Border Margin="0,0,0,10"
-                                        CornerRadius="{StaticResource CornerRadius.Card}"
-                                        Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
-                                        BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
-                                        BorderThickness="1"
-                                        Padding="{StaticResource Thickness.CardPadding}"
-                                        Cursor="Arrow">
+                <!-- 归档卡片列表：ListBox + 虚拟化回收（原 ScrollViewer > ItemsControl 完全无虚拟化，
+                     归档几百条时明显卡顿；F-P1-10 剩余项） -->
+                <ListBox x:Name="ArchivedNotesListBox"
+                         ItemsSource="{Binding FilteredNotes}"
+                         FocusVisualStyle="{x:Null}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="True"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel"
+                         Visibility="{Binding HasNoNotes, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,10" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <ContentPresenter />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:Note}">
+                            <Border Margin="0"
+                                    CornerRadius="{StaticResource CornerRadius.Card}"
+                                    Background="{Binding Color, Converter={StaticResource NoteColorToBgConverter}}"
+                                    BorderBrush="{Binding Color, Converter={StaticResource NoteColorToBorderConverter}}"
+                                    BorderThickness="1"
+                                    Padding="{StaticResource Thickness.CardPadding}"
+                                    Cursor="Arrow">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <!-- 固定效果单例，禁止在 Trigger 内联重建（原 F-P2-22） -->
                                             <Setter Property="Effect" Value="{StaticResource Elevation.CardSubtle}" />
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="False" />
+                                                    </MultiDataTrigger.Conditions>
                                                     <Setter Property="Effect" Value="{StaticResource Elevation.CardHoverLight}" />
-                                                </Trigger>
+                                                </MultiDataTrigger>
+                                                <!-- 键盘/鼠标选中：与主列表一致的 Fluent 2px 强调色轮廓 -->
+                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Fluent.AccentBrush}" />
+                                                    <Setter Property="BorderThickness" Value="2" />
+                                                    <Setter Property="Effect" Value="{StaticResource Elevation.CardFocus}" />
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
@@ -236,9 +274,8 @@
                                         </Grid>
                                     </Border>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
             </Grid>
         </Grid>
         <!-- 1. PIN 锁定遮罩：主列表处于锁定/隐藏状态时打开归档窗口需要重新验证 -->
