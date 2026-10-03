@@ -65,6 +65,18 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
         WeakReferenceMessenger.Default.Register<NoteUpdatedMessage>(this, (_, msg) => HandleNoteMetaChanged(msg.Value));
         WeakReferenceMessenger.Default.Register<NoteDeletedMessage>(this, (_, msg) => HandleNoteDeleted(msg.Value));
         WeakReferenceMessenger.Default.Register<NoteCreatedMessage>(this, (_, msg) => HandleNoteCreated(msg.Value));
+        WeakReferenceMessenger.Default.Register<NotesReloadedRequestedMessage>(this, (_, _) =>
+        {
+            var app = System.Windows.Application.Current;
+            if (app != null && !app.Dispatcher.CheckAccess())
+            {
+                app.Dispatcher.InvokeAsync(async () => await LoadNotesAsync());
+            }
+            else
+            {
+                _ = LoadNotesAsync();
+            }
+        });
         WeakReferenceMessenger.Default.Register<NoteArchivedMessage>(this, (_, msg) => HandleNoteDeleted(msg.Value));
         WeakReferenceMessenger.Default.Register<NoteRestoredMessage>(this, (_, msg) => HandleNoteRestored(msg.Value));
         WeakReferenceMessenger.Default.Register<NewNoteRequestedMessage>(this, (_, _) =>
