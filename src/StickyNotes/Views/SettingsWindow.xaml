@@ -269,7 +269,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 分组: 网络同步 -->
+                <!-- 分组: 网络同步（入口行，详细配置在独立窗口） -->
                 <TextBlock Text="网络同步"
                            Style="{StaticResource Type.Subtitle}"
                            Margin="0,4,0,8" />
@@ -281,184 +281,37 @@
                         Padding="{StaticResource Thickness.CardPadding}"
                         Margin="0,0,0,14"
                         Effect="{StaticResource Elevation.Card}">
-                    <StackPanel>
-                        <!-- 1. 启用开关 -->
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="启用网络同步" Style="{StaticResource Type.SettingTitle}" />
-                                <TextBlock Text="通过 WebDAV 或 Cloudflare R2 在多台设备间同步便签；同一便签按最新修改时间自动合并"
-                                           Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
-                            </StackPanel>
-                            <ui:ToggleSwitch Grid.Column="1"
-                                             IsChecked="{Binding SyncEnabled, Mode=TwoWay}"
-                                             VerticalAlignment="Center" />
-                        </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,0,0,10" />
-
-                        <!-- 2. 后端类型 -->
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="存储后端" Style="{StaticResource Type.SettingTitle}" />
-                                <TextBlock Text="WebDAV 适用于坚果云/Nextcloud/Alist 等；R2 走 S3 兼容 API"
-                                           Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="1"
-                                      Width="210"
-                                      ItemsSource="{Binding SyncBackendOptions}"
-                                      DisplayMemberPath="Label"
-                                      SelectedValuePath="Type"
-                                      SelectedValue="{Binding SelectedSyncBackendType, Mode=TwoWay}"
-                                      VerticalAlignment="Center" />
-                        </Grid>
-
-                        <!-- 3. WebDAV 配置面板 -->
-                        <StackPanel Visibility="{Binding IsWebDavPanelVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <TextBlock Text="服务器地址（目录级 URL，如 https://dav.example.com/dav/StickyNotes/）"
-                                       Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                            <ui:TextBox Text="{Binding SyncWebDavUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        PlaceholderText="https://"
-                                        Margin="0,0,0,8" />
-
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="用户名" Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                                    <ui:TextBox Text="{Binding SyncWebDavUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="密码 / 应用专用密码" Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                                    <PasswordBox x:Name="WebDavPasswordBox"
-                                                 PasswordChanged="WebDavPasswordBox_OnPasswordChanged" />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Text="{Binding SyncWebDavCredentialHint}"
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="多设备同步" Style="{StaticResource Type.SettingTitle}" />
+                            <TextBlock Text="{Binding SyncStatusText}"
                                        Style="{StaticResource Type.CaptionSubtle}"
-                                       FontSize="11" Margin="0,0,0,8" />
-
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="允许明文 HTTP（仅限内网 NAS）" Style="{StaticResource Type.SettingTitle}" />
-                                    <TextBlock Text="默认强制 HTTPS；勾选后允许 http:// 地址，传输内容将不加密"
-                                               Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
-                                </StackPanel>
-                                <ui:ToggleSwitch Grid.Column="1"
-                                                 IsChecked="{Binding SyncAllowInsecureHttp, Mode=TwoWay}"
-                                                 VerticalAlignment="Center" />
-                            </Grid>
-                        </StackPanel>
-
-                        <!-- 4. S3 / Cloudflare R2 配置面板 -->
-                        <StackPanel Visibility="{Binding IsS3PanelVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="150" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="S3 API 端点（R2 账户端点）" Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                                    <ui:TextBox Text="{Binding SyncS3Endpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                PlaceholderText="https://&lt;account-id&gt;.r2.cloudflarestorage.com" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="桶名" Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                                    <ui:TextBox Text="{Binding SyncS3Bucket, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                            </Grid>
-
-                            <TextBlock Text="对象前缀子目录（必填，与其他数据隔离）"
-                                       Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                            <ui:TextBox Text="{Binding SyncS3BasePrefix, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        PlaceholderText="stickynotes/"
-                                        Margin="0,0,0,8" />
-
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="访问密钥 ID (Access Key)" Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                                    <ui:TextBox Text="{Binding SyncS3AccessKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="秘密访问密钥 (Secret Key)" Style="{StaticResource Type.CaptionSubtle}" Margin="0,0,0,4" />
-                                    <PasswordBox x:Name="S3SecretKeyBox"
-                                                 PasswordChanged="S3SecretKeyBox_OnPasswordChanged" />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Text="{Binding SyncS3CredentialHint}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,3,0,0" />
+                            <TextBlock Text="通过 WebDAV 或 Cloudflare R2 同步；后端、凭据与间隔在独立窗口配置"
                                        Style="{StaticResource Type.CaptionSubtle}"
-                                       FontSize="11" />
+                                       FontSize="11"
+                                       Opacity="0.8"
+                                       TextWrapping="Wrap"
+                                       Margin="0,3,0,0" />
                         </StackPanel>
 
-                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,10,0,10" />
-
-                        <!-- 5. 间隔与操作 -->
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="后台同步间隔" Style="{StaticResource Type.SettingTitle}" />
-                                <TextBlock Text="便签新增/修改后 5 秒自动同步一次；此处为兜底轮询间隔"
-                                           Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="1"
-                                      Width="160"
-                                      ItemsSource="{Binding SyncIntervalOptions}"
-                                      DisplayMemberPath="Label"
-                                      SelectedValuePath="Minutes"
-                                      SelectedValue="{Binding SelectedSyncIntervalMinutes, Mode=TwoWay}"
-                                      VerticalAlignment="Center" />
-                        </Grid>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <ui:Button Appearance="Secondary"
-                                       Content="测试连接"
-                                       Padding="14,6"
-                                       Margin="0,0,10,0"
-                                       Command="{Binding TestSyncConnectionCommand}">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="PlugConnected24" />
-                                </ui:Button.Icon>
-                            </ui:Button>
-                            <ui:Button Appearance="Primary"
-                                       Content="立即同步"
-                                       Padding="14,6"
-                                       Command="{Binding SyncNowManualCommand}">
-                                <ui:Button.Icon>
-                                    <ui:SymbolIcon Symbol="ArrowSync24" />
-                                </ui:Button.Icon>
-                            </ui:Button>
-                        </StackPanel>
-
-                        <TextBlock Text="{Binding SyncStatusText}"
-                                   Style="{StaticResource Type.CaptionSubtle}"
-                                   TextWrapping="Wrap" Margin="0,0,0,4" />
-                        <TextBlock Text="{Binding SyncDeviceId, StringFormat=设备标识：{0}}"
-                                   Style="{StaticResource Type.CaptionSubtle}"
-                                   FontSize="11" Opacity="0.8" />
-                    </StackPanel>
+                        <ui:Button Grid.Column="1"
+                                   Appearance="Secondary"
+                                   Content="配置…"
+                                   Padding="12,5"
+                                   Command="{Binding OpenSyncSettingsCommand}"
+                                   VerticalAlignment="Center">
+                            <ui:Button.Icon>
+                                <ui:SymbolIcon Symbol="ArrowSync24" />
+                            </ui:Button.Icon>
+                        </ui:Button>
+                    </Grid>
                 </Border>
 
                 <!-- 分组: 隐私保护 (PIN 锁定 + 闲时自动收起) -->
