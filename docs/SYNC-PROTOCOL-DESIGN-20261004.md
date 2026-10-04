@@ -4,7 +4,7 @@
 - **状态**：v1.1 已评审；Phase 1/2 已实施并通过全部测试（2026-10-04，见 §11 与 CHANGES-20261004）
 - **关联文档**：[`docs/APP-ARCHITECTURE.md`](file:///c:/Home/Projects/StickyNotes/docs/APP-ARCHITECTURE.md) / [`docs/APP-PRODUCT.md`](file:///c:/Home/Projects/StickyNotes/docs/APP-PRODUCT.md)
 - **评审输入**：[`temp/docs/StickyNotes-Sync-Architecture-20261004.md`](file:///c:/Home/Projects/StickyNotes/temp/docs/StickyNotes-Sync-Architecture-20261004.md)（取舍记录见 §12）
-- **修订**：v1.1 采纳评审决议（§12），吸收评审输入的可取项（换行规范化、下行写守卫、JSON 测试向量等）
+- **修订**：v1.1 采纳评审决议（§12），吸收评审输入的可取项；v1.2 按参考实现逐节复核为"可交付第三方实现"精度（§2.2 接口语义细则、§3.2 编码与解析规则、§4.1 裁决语义补全、§5 wire 级细节、§6 精确防抖值、§8 清单扩至 15 条、新增 §11.1 参考实现指引）
 
 ---
 
@@ -53,20 +53,20 @@
 └──────────────┘  └───────────────┘
 ```
 
-### 2.2 存储后端接口（新增 `Sync/IStorageBackend.cs`）
+### 2.2 存储后端接口（`Sync/IStorageBackend.cs`）
 
 ```csharp
-/// <summary>远端对象条目</summary>
+/// <summary>远端对象条目。Key 为相对后端根的路径（如 "notes/<uuid>.json"），统一 '/' 分隔</summary>
 public sealed record RemoteItem(string Key, long? Size, DateTimeOffset? LastModified);
 
 /// <summary>
 /// 存储后端抽象：同步引擎只依赖此接口。
-/// Key 为相对路径（如 "notes/9f3c….json"），序列化由同步层负责。
-/// 实现约定：幂等；失败抛异常；全部方法支持取消；对象不存在不视为错误（Get 返回 null / Delete 视为成功）。
+/// 实现约定：幂等；失败抛异常；全部方法支持取消；对象不存在不算错误（Get 返回 null，Delete 视为成功）。
+/// 实现通常持有 HttpClient 等资源，须实现 IDisposable。
 /// </summary>
-public interface IStorageBackend
+public interface IStorageBackend : IDisposable
 {
-    /// <summary>列出 notes/ 前缀下全部对象（扁平，不涉及其它前缀）</summary>
+    /// <summary>列出全部便签对象（仅形如 notes/<uuid>.json 的条目，扁平列表）</summary>
     Task<IReadOnlyList<RemoteItem>> ListAsync(CancellationToken ct = default);
 
     /// <summary>读取文本，对象不存在返回 null</summary>
@@ -75,13 +75,21 @@ public interface IStorageBackend
     /// <summary>写入/覆盖文本（小文件单请求覆盖，直接 PUT，不做 tmp+rename）</summary>
     Task PutTextAsync(string key, string content, CancellationToken ct = default);
 
-    /// <summary>删除对象（仅墓碑 GC 使用，v1 不调用）</summary>
+    /// <summary>删除对象（仅墓碑 GC 使用，v1 不调用；对象不存在视为成功）</summary>
     Task DeleteAsync(string key, CancellationToken ct = default);
 
     /// <summary>连通性测试（设置页「测试连接」）</summary>
     Task TestAsync(CancellationToken ct = default);
 }
 ```
+
+**接口语义细则**（两个后端都必须遵守）：
+
+- **List 过滤与隔离**：`ListAsync` 只返回 `notes/<小写Guid>.json` 形态的对象。其他对象（陌生前缀、陌生扩展名、文件名非合法 Guid）一律**忽略且绝不删除**——这是向前兼容规则（§3.1）的执行点，在后端层落实。
+- **不存在语义**：`GetTextAsync` 对不存在的对象返回 null（WebDAV 404 / S3 NoSuchKey）；`DeleteAsync` 对不存在视为成功。
+- **TestAsync**：WebDAV = `PROPFIND <root>/ Depth: 0`；S3 = `ListObjectsV2?max-keys=1`（同时验证端点、凭据、桶与前缀）。
+- **首次自举（仅 WebDAV）**：`ListAsync` 遇 `notes/` 集合 404 时，先 `MKCOL <root>/` 再 `MKCOL <root>/notes/`（服务器返回 405/409/403 视为"已存在或不可创建"，留痕继续），然后重列一次；仍不存在按空集合处理。S3 无目录概念，天然无需自举。
+- **超时与连接**：每请求超时 30s；`HttpClient` 实例复用（`PooledConnectionLifetime` 约 10 分钟），禁止每请求新建。
 
 **决策记录——为什么直接 PUT 而不做「PUT 到 .tmp 再 MOVE」**：S3/R2 没有原子 rename（Copy+Delete 两步且非原子），WebDAV 的 MOVE 各服务端行为也不完全一致；为统一两个后端且少一个失败分支，v1 采用直接 PUT。单文件 <10KB，HTTP + TLS 的传输完整性足以保证；万一出现截断文件，防御性解析（§4.1）会跳过它，该设备下一轮重新上传即可自愈。
 
@@ -149,7 +157,18 @@ public interface IStorageBackend
 
 **不含窗口几何字段**（`WindowX/Y/Width/Height/IsOpen`），理由：[`UpdateWindowPlacementAsync`](file:///c:/Home/Projects/StickyNotes/src/StickyNotes/Data/NoteRepository.cs) 移动窗口不 bump `UpdatedAt`，文件里若带坐标必然是过期快照；坐标是设备本地属性，Android 端无意义。新设备收到便签一律用默认落点、`IsOpen=false`（不自动弹窗，与导入行为一致）。
 
-序列化约定（`SyncNoteDto`）：`System.Text.Json`，`PropertyNamingPolicy = CamelCase` + `JsonStringEnumConverter`；`DateTime` 用 .NET 默认 ISO-8601 round-trip 输出即可（无需自定义转换器）。
+序列化约定（`SyncNoteDto`）：`System.Text.Json`，`PropertyNamingPolicy = CamelCase` + `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`；`DateTime` 经专用转换器强制 ISO-8601 UTC round-trip 输出。
+
+**编码与解析规则**（实现方必须逐条对齐）：
+
+1. 文件内容为**单个 UTF-8 JSON 对象**，无 BOM。
+2. **时间戳 Kind 规范化**：写出时一律换算/标注为 UTC（`Local` → 换算，`Unspecified` → 按 UTC 处理）；读入时同样规范化为 UTC。任何一端不得把无时区时间戳当本地时间解释。
+3. **枚举大小写**：`color` 写出为 camelCase 枚举名（如 `yellow`、`charcoal`）；解析必须大小写不敏感（容忍 `Yellow`）。
+4. **防御性校验**（任一不满足 → 该文件按解析失败跳过，绝不中断整轮）：
+   - JSON 语法合法；
+   - `id` 非空且与文件名中的 Guid 一致；
+   - `schemaVersion` ≤ 本端支持的最高版本（大于则跳过并记日志——老客户端不吃坏新格式）。
+5. 文件名约定：Guid 的小写 "D" 格式（8-4-4-4-12 带连字符）+ `.json`。
 
 ### 3.3 与现有备份格式（`NoteBackupItem`）的关系
 
@@ -196,8 +215,12 @@ finally: 释放单飞
 
 - **幂等**：任意一轮中途断网/崩溃，下一轮全量对账自动收敛，不需要任何恢复逻辑。
 - **防乒乓**：合并结果与远端一致就不 PUT。没有这条，两台设备会永远互相覆盖上传。
-- **上行逐个 PUT**（失败即整轮终止，本轮已上传的文件有效，下轮续传其余——按 `UpdatedAt` 比较天然只补差量）。
-- **下行守卫**（吸收自评审输入的 `local_seq` 思想，适配全量对账）：对账在"读本地快照 → 下载解析 → 写库"之间存在秒级窗口，若用户恰好在此窗口编辑了将被远端覆盖的便签，无条件写库会把本地新编辑连带冲掉（双端同时丢改）。因此下行写入用新增仓储方法 `ApplyRemoteBatchAsync`：单事务内条件 Upsert（`WHERE Id=@id AND UpdatedAt=@快照值`），不匹配的行本轮跳过并记日志，下一轮对账自动收敛。上行方向无此问题——本地是该方向的新的一方，窗口内的新编辑下一轮重传即可自愈。
+- **上行逐个 PUT，整文件覆盖**：每次上传写入**完整**便签 JSON（无增量/补丁语义）；失败即整轮终止，本轮已上传的文件有效，下轮续传其余——按 `UpdatedAt` 比较天然只补差量。
+- **全部下载失败必须中止本轮**（正确性关键）：若列表非空但每个对象的 GET 都因网络/认证失败，本轮必须抛错终止，**绝不允许**把这些失败当作"远端为空"继续对账——否则本地会把远端全部当作"缺失"重新灌回，等效于一次误覆盖式清空重建。部分失败（至少一个对象成功）则跳过失败对象、本轮继续。
+- **两类"跳过"语义不同**：网络/认证失败（下载异常）与数据类跳过（坏 JSON、陌生文件、超限、schemaVersion 过高）必须分开计数与记录——前者可能意味着后端不可用，后者永远不该影响整轮成败。
+- **时间戳不回填、不对齐**：业务内容相同但时间戳不同（例如"改了又改回"）→ 双方都**不传输**，时间戳保持各端现状。时间戳是裁决输入而非需要同步一致的数据；任何"顺手把时间戳改成一致"的实现都会制造无意义的写放大甚至乒乓。
+- **单飞语义**：同一时刻只允许一轮运行；并发触发**直接放弃**（立即返回"跳过"），不排队、不等待、不合并结果。触发器无需去重，全部汇入引擎由单飞闸兜底。
+- **下行守卫**（吸收自评审输入的 `local_seq` 思想，适配全量对账）：对账在"读本地快照 → 下载解析 → 写库"之间存在秒级窗口，若用户恰好在此窗口编辑了将被远端覆盖的便签，无条件写库会把本地新编辑连带冲掉（双端同时丢改）。因此下行写入用存储方法 `ApplyRemoteBatchAsync`：单事务内逐条处理——本地无此行 → **强制**按几何默认落点、`IsOpen=false` 插入（不信任调用方携带的几何/打开状态）；本地存在且当前 `UpdatedAt` 与快照值**时刻相等**（比较时间点，不是字符串）→ 覆盖业务字段（content/color/isPinnedInList/alwaysOnTop/isDeleted/updatedAt），**窗口几何与 IsOpen 保持本地现状**；时刻不等（快照后被本地编辑）→ 跳过并记日志，下一轮对账自动收敛。上行方向无此问题——本地是该方向的新的一方，窗口内的新编辑下一轮重传即可自愈。
 - **为什么不需要 dirty / remote_version 本地状态**（对比评审输入方案 B 的 P0 模型改造）：全量对账每轮从"本地库 + 远端列表"两个真值现场重新推导差量，不维护任何"上次同步到哪"的状态，因此不存在"推送成功却未清 dirty"一类状态机 bug，本地表结构零迁移。
 - 请求级超时 30s；失败放弃本轮，等下一次触发，不做应用层重试退避（触发器天然限频）。
 
@@ -230,14 +253,20 @@ finally: 释放单飞
 
 | 接口语义 | HTTP 操作 |
 |---|---|
-| `ListAsync` | `PROPFIND <root>/notes/`，`Depth: 1`，解析 `multistatus`，取 `getlastmodified` / `getcontentlength`，过滤出 `<uuid>.json` |
-| `GetTextAsync` | `GET <root>/notes/<key>` |
-| `PutTextAsync` | `PUT <root>/notes/<key>` |
-| `DeleteAsync` | `DELETE` |
+| `ListAsync` | `PROPFIND <root>/notes/`，`Depth: 1`，解析 207 multistatus |
+| `GetTextAsync` | `GET <root>/notes/<key>`，404 → null |
+| `PutTextAsync` | `PUT <root>/notes/<key>`，`Content-Type: application/json` |
+| `DeleteAsync` | `DELETE <root>/notes/<key>`，404 → 成功 |
 | `TestAsync` | `PROPFIND <root>/ Depth: 0` |
 
-- 认证：Basic（用户名 + 应用专用密码）；强制/建议 HTTPS。
-- 依赖：仅 `HttpClient` + `System.Xml`（`multistatus` 命名空间 `DAV:`），零第三方包；注意 URL 转义与集合项（以 `/` 结尾的 href）过滤。
+**wire 细节**（实现方逐条对齐）：
+
+- 请求体（List/Test 的 PROPFIND 均使用）：
+  `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:getlastmodified/><d:getcontentlength/><d:resourcetype/></d:prop></d:propfind>`，请求头带 `Depth`。
+- **multistatus 解析规则**：对每个 `response` 元素取 `href`；href 做 URL 解码后以 `/` 结尾的是集合项，跳过；文件名取 href 最后一段。属性读取按**元素 LocalName 匹配**（`getlastmodified`/`getcontentlength`），不依赖服务器的前缀写法（有的用 `<D:`、有的无前缀）。`getlastmodified` 优先按 RFC 1123（`R` 格式）解析，解析失败回落通用 `DateTimeOffset` 解析。LastModified 仅作展示/缓存，**绝不参与合并裁决**（裁决只看文件内 `updatedAt`）。
+- 认证：`Authorization: Basic base64(user:pass)`（UTF-8）；凭据为服务商的应用专用密码。401/403 必须映射为用户可读的"认证失败/权限不足"错误文案。
+- URL 拼装：`<root>` 规范化为以 `/` 结尾；key 逐段 `URI.EscapeDataString` 后拼接。
+- 依赖：仅 `HttpClient` + XML 解析，零第三方包。
 - 兼容目标：坚果云、Nextcloud、Alist、Apache `mod_dav`、`rclone serve webdav`。**nginx 原生 dav_module 对 PROPFIND 支持不完整，不列为支持目标**（吸收自评审输入的兼容性清单）。本协议不使用 LOCK / If-Match，无需 WebDAV 能力探测；遇不支持的方法即报错放弃本轮。
 - 仅在用户显式选择"信任明文 HTTP（内网 NAS）"时允许 `http://`，设置页给出警告。
 
@@ -252,6 +281,18 @@ finally: 释放单飞
 | `TestAsync` | `HeadBucket` 或空 prefix `ListObjectsV2&max-keys=1` |
 
 - R2 端点：`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`，path-style（`/<bucket>/<BasePrefix>/notes/<key>`），签名 region 固定 `auto`，AWS SigV4（含 `x-amz-content-sha256` 头）。凭据为 R2 API Token（建议只授予目标前缀/桶读写权限）。**BasePrefix 必填**（如 `stickynotes/`，评审决议 4）：`ListAsync` 以 `BasePrefix + "notes/"` 过滤，复用桶时与其他数据天然隔离。
+- **前缀规范化**：BasePrefix 去除首尾 `/` 后追加单个尾部 `/`（`/stickynotes` → `stickynotes/`）；空串表示桶根。桶名两端去空白。
+
+**SigV4 签名规范**（参考实现已通过 AWS 官方文档测试向量验证；Android 端可复用任意 SigV4 库，但签名形态必须一致）：
+
+- 参与签名的头**固定**为：`host`、`x-amz-content-sha256`、`x-amz-date`；SignedHeaders 串恒为 `host;x-amz-content-sha256;x-amz-date`。
+- `x-amz-date` 格式 `yyyyMMdd'T'HHmmss'Z'`（UTC）；scope = `<dateStamp>/auto/s3/aws4_request`。
+- payload hash = `SHA256(UTF-8 请求体)`；无 body 请求（GET/DELETE）使用空串哈希常量 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。
+- 规范 URI：路径逐段 RFC 3986 转义（保留 `A-Za-z0-9-_.~`），分隔符 `/` 不转义（如 `test$file.text` → `test%24file.text`）。
+- 规范查询串：参数按 key 再按 value 的字典序排序，key/value 先解码再按 RFC 3986 重编码，**空值参数保留 `key=` 形态**（不可省略 `=`）。
+- 规范请求 = `METHOD\n规范URI\n规范查询\n规范头(每行 name:value\n)\nSignedHeaders\npayloadHash`；规范头块末行自带换行后再接一个空行，再是 SignedHeaders 行。
+- 错误处理：非 2xx 时解析响应体 `<Error><Code>/<Message>` 生成可读错误（如 `NoSuchKey`、`InvalidAccessKeyId`）；GET 的 404/NoSuchKey → null，DELETE 的 404 → 成功。
+- `ListObjectsV2` 参数：`list-type=2`、`max-keys=1000`、`prefix=<BasePrefix>notes/`；`IsTruncated=true` 时携带 `continuation-token` 翻页直至取完。`PUT` 的 `Content-Type: application/json`。
 - **依赖决策：手写最小 SigV4 签名器（约 150 行，HMAC-SHA256 即可，纯确定性、可单测）**，不引入 AWSSDK.S3（数 MB，与项目 Fody/Costura 单文件打包目标冲突）。签名器只实现本次用到的 4 个动词 + `ListObjectsV2` 查询串签名。
 - 该实现天然兼容任意 S3 兼容存储（MinIO、Backblaze B2 等），配置里 endpoint/bucket 均可改。
 
@@ -269,17 +310,18 @@ finally: 释放单飞
 **触发时机**（全部走单飞的同一入口 `SyncNowAsync(reason)`）：
 
 1. 启动完成后延迟 10s；
-2. 便签新增/修改后防抖 5s（挂 `AutoSaveCoordinator` 的保存事件，新建即首次保存，天然覆盖，评审决议 1）；
-3. 后台定时，默认 **15 分钟**（可配 5–120，评审决议 1）；
-4. 设置页「立即同步」按钮（同步中禁用）；
-5. 网络恢复事件（`NetworkInformation.NetworkAvailabilityChanged`，吸收自评审输入）。
+2. 便签新增/内容修改后防抖 **5s**（挂自动保存事件，新建即首次保存，天然覆盖，评审决议 1）；
+3. 便签删除（归档）/恢复后防抖 **2s**（墓碑尽快传播）；
+4. 后台定时，默认 **15 分钟**（可配 5–120，越界回 15，评审决议 1）；
+5. 设置页「立即同步」按钮（同步中置忙禁用；引擎单飞兜底）；
+6. 网络恢复事件（延迟 3s）。
 
-**设置页新增区块**（挂入现有 `SettingsWindow`/`SettingsViewModel`）：
+**触发合并语义**：防抖期内的新触发取消并重置旧计时（不是叠加排队）；所有触发源无需相互感知，漏触发由定时轮询兜底。
 
-- 启用开关；后端类型（WebDAV / Cloudflare R2）；
-- WebDAV：服务器地址、用户名、密码；R2：Endpoint、Bucket、AccessKey、SecretKey；
-- 「测试连接」（调 `TestAsync`，成功显示对象数/失败显示错误）；
-- 同步间隔；状态行：最近成功同步时间 / 上次错误摘要（认证失败/断网只影响同步，**绝不影响本地使用、绝不触发本地数据清理**）。
+**设置界面**（决议 6：独立窗口，主设置页只留入口行避免页面过长）：
+
+- 主设置页「网络同步」入口行：状态摘要（最近成功时间/异常提示）+「配置…」按钮打开独立同步设置窗口（单例管理，重复打开仅激活）；
+- 独立同步设置窗口包含：启用开关；后端类型（WebDAV / Cloudflare R2）；WebDAV：服务器地址、用户名、密码；R2：Endpoint、Bucket、BasePrefix、AccessKey、SecretKey；「测试连接」（调 `TestAsync`）；同步间隔；状态行：最近成功同步时间 / 上次错误摘要（认证失败/断网只影响同步，**绝不影响本地使用、绝不触发本地数据清理**）；设备标识展示。
 
 配置字段并入现有 `settings.json`（沿用其 `.bak` 恢复与损坏防护机制），同步的**运行时状态**（`lastSyncAt`、`lastError`、mtime 缓存）单独存数据目录 `sync_state.json`，不与用户设置混淆。
 
@@ -316,16 +358,18 @@ finally: 释放单飞
 1. 单飞：并发触发第二轮直接放弃，不排队不叠加。
 2. 幂等：任意轮中断（列表后断网 / 下载一半 / 上传一半 / 进程崩溃），下一轮自动收敛，无恢复代码。
 3. 坏文件隔离：`notes/` 下出现非法 JSON / id 与文件名不符 / `schemaVersion` 更高 → 跳过 + 日志，整轮继续。
-4. 不覆盖本地较新：`>=` LWW 规则与导入服务一致。
-5. 防乒乓：无差异不 PUT；无差异不重复 `SaveBatchAsync`。
-6. 删除传播：A 删 → B 收到墓碑；A 清空回收站后，B 的墓碑回流不复活、不可见。
-7. 时间戳全链路 UTC ISO-8601；下行的 `UpdatedAt` 原样入库（不落服务器时间/本地时间）。
-8. 轮次摘要日志：listed / downloaded / uploaded / skipped / errors。
-9. 陌生文件只忽略不清理（向前兼容）。
-10. 凭据不以明文出现在 settings.json 与日志中。
-11. 换行规范化：`content` 在同步 DTO 边界统一为 `\n`，内容比对发生在规范化之后（否则防乒乓失效）。
-12. 下行条件更新守卫生效：对账窗口内的本地编辑不被远端覆盖。
-13. 同步日志不包含便签正文。
+4. **全部下载失败必须中止本轮**（不得当作"远端为空"继续对账）；部分失败跳过失败对象继续。
+5. 不覆盖本地较新：`>=` LWW 规则与导入服务一致（相等且内容不同 → 本地胜）。
+6. 防乒乓：业务内容无差异不 PUT；无差异不重复写本地库。
+7. **时间戳不回填**：内容相同、时间戳不同 → 双方零传输。
+8. 删除传播：A 删 → B 收到墓碑；A 清空回收站后，B 的墓碑回流不复活、不可见。
+9. 时间戳全链路 UTC ISO-8601；下行的 `UpdatedAt` 原样入库（不落服务器时间/本地时间）。
+10. 轮次摘要日志：listed / downloaded / uploaded / skipped / guarded（两类跳过分开计数）。
+11. 陌生文件只忽略不清理（向前兼容）。
+12. 凭据不以明文出现在 settings.json 与日志中。
+13. 换行规范化：`content` 在同步 DTO 边界统一为 `\n`，内容比对发生在规范化之后（否则防乒乓失效）。
+14. 下行条件更新守卫生效：对账窗口内的本地编辑不被远端覆盖；同步插入强制默认几何与 `IsOpen=false`。
+15. 同步日志不包含便签正文。
 
 ---
 
@@ -358,6 +402,13 @@ finally: 释放单飞
 1. **语言无关 JSON 测试向量**：合并规则用例以 `tests/SyncVectors/*.json` 表达（local/remote 快照 + 期望结果），.NET 引擎现在跑、将来 Kotlin 引擎跑同一份向量，保证两端行为一致（覆盖 §4 的每一行裁决与 §8 的每个场景）。
 2. **收敛性仿真**：两个 `SyncEngine` 实例共享同一个 `FakeStorageBackend`，随机交替执行 编辑/删除/清空回收站/同步，断言有限轮内两端收敛到相同状态。
 
+### 11.1 参考实现与可执行规格（Android / 第三方实现者必读）
+
+- **参考实现**：`src/StickyNotes/Sync/`（协议序列化、两个后端、引擎、凭据保护、状态存储）；触发与 UI 接线在 `src/StickyNotes/Services/SyncHost.cs`。
+- **可执行规格**：`tests/StickyNotes.Tests/Sync/` 下的用例是协议语义的权威表达——`SyncEngineTests`（LWW 四分支、墓碑传播、硬删不复活、删除 vs 编辑、坏文件隔离、全失败中止/部分失败继续、单飞、换行规范化、双设备收敛）、`SyncProtocolTests`（wire 格式、防御解析、下行守卫）、`SigV4SignerTests`（AWS 官方向量）、`SyncWebDavIntegrationTests`（真实服务器全链路）。第三方实现以这些用例的**语义**为准，而非代码结构。
+- **JSON 向量的落地时机**：语言无关向量机制在 Phase 3 启动时落地（把 §8 清单逐条转成向量供两端互验）；在此之前上述 C# 用例即唯一可执行规格。
+- **文档与实现的冲突裁决**：本文档如与参考实现/测试出现不一致，以实现与测试为准，并回改本文档（协议的权威定义 = 本文档 + 测试语义的交集）。
+
 ---
 
 ## 十二、评审决议（2026-10-04）
@@ -369,6 +420,7 @@ finally: 释放单飞
 | 3 | 冲突副本 | 不做，统一按 `UpdatedAt` 时间戳 LWW 裁决（§4.1/§4.2） |
 | 4 | S3/R2 前缀 | 无论是否专用桶，一律必填 BasePrefix 子目录（§5.2） |
 | 5 | `deviceId` 生成规则 | 平台前缀 + 6 位随机串（如 `win-8xf7ad`），首启生成后存 `settings.json`（§3.2） |
+| 6 | 同步设置界面形态（2026-10-04 追加） | 独立同步设置窗口；主设置页只留状态入口行，避免设置页过长（§6） |
 
 **评审输入取舍记录**（[`temp/docs/StickyNotes-Sync-Architecture-20261004.md`](file:///c:/Home/Projects/StickyNotes/temp/docs/StickyNotes-Sync-Architecture-20261004.md)）：
 

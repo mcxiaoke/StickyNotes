@@ -18,6 +18,7 @@ public sealed class WindowManager
     private readonly Dictionary<Guid, NoteWindow> _activeNoteWindows = new();
     private ArchivedNotesWindow? _archivedNotesWindow;
     private SettingsWindow? _settingsWindow;
+    private SyncSettingsWindow? _syncSettingsWindow;
     private bool _isShuttingDown;
 
     /// <summary>
@@ -433,6 +434,26 @@ public sealed class WindowManager
         _settingsWindow.Show();
         _settingsWindow.Activate();
         return _settingsWindow;
+    }
+
+    /// <summary>
+    /// 打开或激活网络同步设置窗口（独立于主设置窗口，避免设置页过长）
+    /// </summary>
+    public SyncSettingsWindow OpenOrActivateSyncSettingsWindow()
+    {
+        if (_syncSettingsWindow != null && _syncSettingsWindow.IsLoaded)
+        {
+            if (_syncSettingsWindow.WindowState == WindowState.Minimized)
+                _syncSettingsWindow.WindowState = WindowState.Normal;
+            _syncSettingsWindow.Activate();
+            return _syncSettingsWindow;
+        }
+
+        _syncSettingsWindow = _serviceProvider.GetRequiredService<SyncSettingsWindow>();
+        _syncSettingsWindow.Closed += (_, _) => _syncSettingsWindow = null;
+        _syncSettingsWindow.Show();
+        _syncSettingsWindow.Activate();
+        return _syncSettingsWindow;
     }
 
     /// <summary>

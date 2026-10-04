@@ -33,10 +33,11 @@ public class SyncR2SmokeTests
         }
 
         var bucket = Environment.GetEnvironmentVariable("STICKYNOTES_R2_BUCKET")
+                     ?? await DiscoverFirstBucketAsync(endpoint, accessKey, secretKey)
                      ?? await ProbeKnownBucketCandidatesAsync(endpoint, accessKey, secretKey);
         Assert.IsFalse(string.IsNullOrWhiteSpace(bucket),
             $"R2 未发现可用桶（endpoint={endpoint}，诊断：{_discoveryDetail}）。" +
-            "R2 令牌为桶级授权时无法 ListBuckets，请设置 STICKYNOTES_R2_BUCKET 指定桶名。");
+            "若令牌为桶级授权（ListBuckets 被拒），请设置 STICKYNOTES_R2_BUCKET 指定桶名。");
         AppLog.Info("[SyncR2SmokeTests] 使用真实桶进行冒烟（桶名不在断言/日志中展示）");
 
         var testPrefix = $"stickynotes-test-{Guid.NewGuid().ToString("N")[..8]}/";

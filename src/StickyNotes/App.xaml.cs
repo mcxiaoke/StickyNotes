@@ -336,11 +336,13 @@ public partial class App : Application
         services.AddSingleton<NotesListViewModel>();
         services.AddSingleton<ArchivedNotesViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddTransient<SyncSettingsViewModel>();
         services.AddTransient<NoteViewModel>();
 
         // Views
         services.AddSingleton<NotesListWindow>();
         services.AddTransient<ArchivedNotesWindow>();
         services.AddTransient<SettingsWindow>();
+        services.AddTransient<SyncSettingsWindow>();
     }
 }
