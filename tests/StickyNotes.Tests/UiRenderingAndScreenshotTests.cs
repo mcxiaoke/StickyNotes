@@ -681,7 +681,7 @@ public class UiRenderingAndScreenshotTests
                 }
             };
 
-            var vm = new ArchivedNotesViewModel(repo);
+            var vm = new ArchivedNotesViewModel(repo, new SearchService());
             vm.LoadArchivedNotesAsync().GetAwaiter().GetResult();
 
             Assert.AreEqual(2, vm.ArchivedCount);
@@ -716,7 +716,7 @@ public class UiRenderingAndScreenshotTests
             }
         };
 
-        var vm = new ArchivedNotesViewModel(repo);
+        var vm = new ArchivedNotesViewModel(repo, new SearchService());
         var changed = new List<string>();
         vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? string.Empty);
 
@@ -749,7 +749,7 @@ public class UiRenderingAndScreenshotTests
                 }
             };
 
-            var vm = new ArchivedNotesViewModel(repo);
+            var vm = new ArchivedNotesViewModel(repo, new SearchService());
             var win = new ArchivedNotesWindow(vm);
 
             // 窗口构造时集合为空 → 绑定初值应为不可用

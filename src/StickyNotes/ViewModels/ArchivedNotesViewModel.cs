@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using StickyNotes.Data;
 using StickyNotes.Messages;
 using StickyNotes.Models;
+using StickyNotes.Services;
 
 namespace StickyNotes.ViewModels;
 
@@ -14,6 +15,7 @@ namespace StickyNotes.ViewModels;
 public partial class ArchivedNotesViewModel : ObservableObject
 {
     private readonly INoteRepository _repository;
+    private readonly ISearchService _searchService;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FilteredNotes))]
@@ -33,33 +35,8 @@ public partial class ArchivedNotesViewModel : ObservableObject
             if (string.IsNullOrWhiteSpace(SearchText))
                 return ArchivedNotes;
 
-            var trimmed = SearchText.Trim();
-            var tokens = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-            if (tokens.Length == 0) return ArchivedNotes;
-            var compact = string.Concat(tokens);
-
-            return ArchivedNotes.Where(n =>
-            {
-                var content = n.Content ?? string.Empty;
-                var title = n.DisplayTitle ?? string.Empty;
-
-                if (content.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
-                    title.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                if (compact.Length > 0 &&
-                    (content.Contains(compact, StringComparison.OrdinalIgnoreCase) ||
-                     title.Contains(compact, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return true;
-                }
-
-                return tokens.All(t =>
-                    content.Contains(t, StringComparison.OrdinalIgnoreCase) ||
-                    title.Contains(t, StringComparison.OrdinalIgnoreCase));
-            });
+            // 复用 SearchService 的统一匹配规则（内容 + 标题），消除手写副本的语义漂移（原 F-P2-8）
+            return ArchivedNotes.Where(n => _searchService.IsMatch(n, SearchText));
         }
     }
 
@@ -91,9 +68,10 @@ public partial class ArchivedNotesViewModel : ObservableObject
         OnPropertyChanged(nameof(CanClearArchived));
     }
 
-    public ArchivedNotesViewModel(INoteRepository repository)
+    public ArchivedNotesViewModel(INoteRepository repository, ISearchService searchService)
     {
         _repository = repository;
+        _searchService = searchService;
 
         // 监听便签归档消息，若归档窗口开启中，自动拉取新归档
         WeakReferenceMessenger.Default.Register<NoteArchivedMessage>(this, async (_, _) =>
