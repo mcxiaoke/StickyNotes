@@ -166,6 +166,24 @@ public class SearchServiceTests
     }
 
     [TestMethod]
+    public void IsMatch_ShouldReuseSearchRule_ForContentPhraseCompactAndTokens()
+    {
+        // 共享匹配规则（F-P2-8）：与 Search 的便签级门槛同源 —— 短语 / 紧凑连写 / 跨行 AND
+        Assert.IsTrue(_searchService.IsMatch(new Note { Content = "hello brave world" }, "hello world"),
+            "全部 tokens 分散在内容中应命中（AND 语义）");
+        Assert.IsTrue(_searchService.IsMatch(new Note { Content = "我的 openrouter 密钥" }, "open router"),
+            "紧凑连写词应命中（open router → openrouter）");
+        Assert.IsTrue(_searchService.IsMatch(new Note { Content = "第一行有 alpha\n第二行有 beta" }, "alpha beta"),
+            "tokens 分属不同物理行仍应命中");
+        Assert.IsFalse(_searchService.IsMatch(new Note { Content = "只包含 target 一个词" }, "alpha beta"),
+            "仅命中部分 tokens 不应命中（与主搜索门槛一致）");
+        Assert.IsTrue(_searchService.IsMatch(new Note { Content = "任意内容" }, "   "),
+            "空白关键词语义为「不过滤」，恒命中");
+        Assert.IsFalse(_searchService.IsMatch(new Note { Content = string.Empty }, "alpha"),
+            "空内容不应命中");
+    }
+
+    [TestMethod]
     public void Search_SameNoteMixedTiers_ShouldRankByTier_ThenLineNumber()
     {
         // 同一便签内：行 1 Tier 3（仅分词）、行 5 Tier 2（同行全词）、行 9 Tier 1（完整短语），行距均 4 不合并

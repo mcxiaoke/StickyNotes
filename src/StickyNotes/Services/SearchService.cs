@@ -27,17 +27,12 @@ public sealed class SearchService : ISearchService
 
     public IReadOnlyList<SearchHit> Search(IEnumerable<Note> notes, string keyword)
     {
-        if (string.IsNullOrWhiteSpace(keyword))
-            return Array.Empty<SearchHit>();
+        var parsed = ParseKeyword(keyword);
+        if (parsed == null) return Array.Empty<SearchHit>();
 
-        var trimmed = keyword.Trim();
-        var tokens = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length == 0) return Array.Empty<SearchHit>();
+        var (trimmed, tokens, compact) = parsed.Value;
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-
-        // 紧凑词（去除所有空格，用于“open router”匹配“openrouter”等连写场景）
-        var compact = string.Concat(tokens);
 
         // 收集待匹配与待高亮的有效关键词集合（按长度降序排列，优先长匹配）
         var highlightKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -60,15 +55,8 @@ public sealed class SearchService : ISearchService
             var content = note.Content;
             if (string.IsNullOrEmpty(content)) continue;
 
-            // 1. 便签匹配判定规则（短路求值，高频搜索下避免对长文本重复全文扫描）：
-            // A. 正文直接包含完整 trimmed 短语；
-            // B. 正文包含紧凑连写词 compact（例如 open router 匹配 openrouter）；
-            // C. 正文包含全部 tokens（AND 模式，跨行/跨词组合匹配）；
-            bool noteMatches = content.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
-                || (compact.Length > 0 && content.Contains(compact, StringComparison.OrdinalIgnoreCase))
-                || tokens.All(t => content.Contains(t, StringComparison.OrdinalIgnoreCase));
-
-            if (!noteMatches)
+            // 1. 便签级匹配门槛（规则与 <see cref="IsMatch"/> 的内容分支一致，见 MatchesContent 注释）
+            if (!MatchesContent(content, trimmed, compact, tokens))
             {
                 continue;
             }
@@ -85,6 +73,9 @@ public sealed class SearchService : ISearchService
                 lines[i] = rawLines[i].TrimEnd('\r');
                 runningOffset += rawLines[i].Length + 1; // +1 为 '\n' 换行符
             }
+
+            // 便签全文总词频对同一便签的所有卡片是同一个值，只在便签级计算一次
+            int totalMatches = Math.Max(1, CountTotalMatches(content, sortedKeywords));
 
             // 3. 全行扫描：收集每个命中行的分级与选区信息（不再找到首行即 break）
             var hitLines = new List<HitLine>();
@@ -110,7 +101,7 @@ public sealed class SearchService : ISearchService
                         || hitLines[i].LineIndex - hitLines[i - 1].LineIndex > MergeLineGap;
                     if (!flush) continue;
 
-                    cards.Add(BuildHitCard(note, lines, sortedKeywords, hitLines, groupStart, i - 1));
+                    cards.Add(BuildHitCard(note, lines, sortedKeywords, hitLines, groupStart, i - 1, totalMatches));
                     groupStart = i;
                 }
 
@@ -142,7 +133,7 @@ public sealed class SearchService : ISearchService
                     Segments: fallbackSegments,
                     UpdatedAt: note.UpdatedAt,
                     Lines: fallbackSnippetLines,
-                    TotalMatches: Math.Max(1, CountTotalMatches(content, sortedKeywords)),
+                    TotalMatches: totalMatches,
                     DisplayLineNumber: "1",
                     Tier: TierPartial));
             }
@@ -172,6 +163,59 @@ public sealed class SearchService : ISearchService
 
     /// <summary>单个命中行的分级与选区记录（行号 0 基；相对/绝对选区均为 [Start, End)）</summary>
     private readonly record struct HitLine(int LineIndex, int Tier, int RelStart, int RelEnd, int AbsStart, int AbsEnd);
+
+    /// <summary>
+    /// 便签匹配判定（内容或标题），供归档窗口等筛选场景复用，
+    /// 消除「归档过滤手写匹配规则」与 SearchService 的双实现漂移（原 F-P2-8）。
+    /// 判定规则与 <see cref="Search"/> 的便签级门槛完全一致：
+    /// A. 包含完整短语；B. 包含紧凑连写词；C. 包含全部 tokens（AND，可分属内容与标题）。
+    /// 空白关键词恒返回 true（语义为「不过滤」）。
+    /// </summary>
+    public bool IsMatch(Note note, string keyword)
+    {
+        var parsed = ParseKeyword(keyword);
+        if (parsed == null) return true;
+
+        var (trimmed, tokens, compact) = parsed.Value;
+        var content = note.Content ?? string.Empty;
+        if (MatchesContent(content, trimmed, compact, tokens)) return true;
+
+        // DisplayTitle 由内容首行派生、必然是内容的子串，标题分支实际命中不了内容未命中的便签；
+        // 保留它与历史归档过滤语义逐字对齐，也为将来 Note 出现独立标题字段留好接口。
+        var title = note.DisplayTitle ?? string.Empty;
+        if (title.Length == 0) return false;
+
+        return title.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
+            || (compact.Length > 0 && title.Contains(compact, StringComparison.OrdinalIgnoreCase))
+            || tokens.All(t => title.Contains(t, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// 解析搜索关键词：去除首尾空白、按空格/制表符拆分 tokens、生成紧凑连写词。
+    /// 无有效 token（空/全空白）时返回 null。
+    /// </summary>
+    private static (string Trimmed, string[] Tokens, string Compact)? ParseKeyword(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return null;
+
+        var trimmed = keyword.Trim();
+        var tokens = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0) return null;
+
+        return (trimmed, tokens, string.Concat(tokens));
+    }
+
+    /// <summary>
+    /// 便签正文级匹配门槛。
+    /// 注意：<c>||</c> 的短路只让**命中**的便签提前返回；未命中便签三个条件都会
+    /// 对全文各扫描一遍，这是与行级扫描相互独立的一轮成本，规模优化见 F-P2-25（暂缓）。
+    /// </summary>
+    private static bool MatchesContent(string content, string trimmed, string compact, string[] tokens)
+    {
+        return content.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
+            || (compact.Length > 0 && content.Contains(compact, StringComparison.OrdinalIgnoreCase))
+            || tokens.All(t => content.Contains(t, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// 对单行做匹配质量分级，并给出命中选区（行内相对 [Start, End)）：
@@ -267,7 +311,8 @@ public sealed class SearchService : ISearchService
         IReadOnlyList<string> sortedKeywords,
         List<HitLine> hitLines,
         int from,
-        int to)
+        int to,
+        int totalMatches)
     {
         int firstLine = hitLines[from].LineIndex;
         int lastLine = hitLines[to].LineIndex;
@@ -314,7 +359,7 @@ public sealed class SearchService : ISearchService
             Segments: allSegments,
             UpdatedAt: note.UpdatedAt,
             Lines: snippetLines,
-            TotalMatches: Math.Max(1, CountTotalMatches(note.Content, sortedKeywords)),
+            TotalMatches: totalMatches,
             DisplayLineNumber: displayLineNumber,
             Tier: tier);
     }
