@@ -69,6 +69,140 @@ public class SearchServiceTests
     }
 
     [TestMethod]
+    public void Search_MultiLineHits_ShouldProduceMultipleCardsWithinCap()
+    {
+        // 行 1/5/9/13 命中（行距 4 > 2 不合并）→ 4 张卡片 → Cap 截断为 3
+        var content = "apple\nfiller\nfiller\nfiller\napple\nfiller\nfiller\nfiller\napple\nfiller\nfiller\nfiller\napple";
+        var note = new Note { Id = Guid.NewGuid(), Content = content };
+
+        var hits = _searchService.Search(new[] { note }, "apple");
+
+        Assert.AreEqual(3, hits.Count, "单便签命中卡片数应被截断为上限 3");
+        Assert.AreEqual(1, hits[0].LineNumber);
+        Assert.AreEqual(5, hits[1].LineNumber);
+        Assert.AreEqual(9, hits[2].LineNumber);
+        Assert.IsTrue(hits.All(h => h.TotalMatches == 4), "胶囊分母应统计全文真实词频 4 处");
+        Assert.AreEqual("第 1 行 · 共 4 处", hits[0].BadgeText);
+    }
+
+    [TestMethod]
+    public void Search_PhraseMatch_ShouldRankAheadOf_TokenMatches_CrossNotes()
+    {
+        // 便签 A 仅含分词（跨行 AND 勉强命中）但更新更晚；便签 B 含完整短语但更新较早
+        var newerPartial = new Note
+        {
+            Id = Guid.NewGuid(),
+            Content = "Cloudflare 帐号\nR2 密钥待补",
+            UpdatedAt = DateTime.UtcNow
+        };
+        var olderPhrase = new Note
+        {
+            Id = Guid.NewGuid(),
+            Content = "Cloudflare R2 User Token 配置",
+            UpdatedAt = DateTime.UtcNow.AddHours(-1)
+        };
+
+        var hits = _searchService.Search(new[] { newerPartial, olderPhrase }, "Cloudflare R2");
+
+        Assert.AreEqual(2, hits.Count);
+        Assert.AreEqual(olderPhrase.Id, hits[0].NoteId, "含完整短语的较早便签应全局排第一");
+        Assert.AreEqual(1, hits[0].Tier);
+        Assert.AreEqual(3, hits[1].Tier, "仅分词的便签应定级 Tier 3 并排在后");
+        Assert.AreEqual(newerPartial.Id, hits[1].NoteId);
+    }
+
+    [TestMethod]
+    public void Search_AdjacentHitLines_ShouldMergeContextWindow()
+    {
+        var lines = new List<string>();
+        for (int i = 1; i <= 12; i++) lines.Add($"填充行 {i}");
+        lines[7] = "第八行 apple";
+        lines[8] = "第九行 apple";
+        var content = string.Join("\n", lines);
+
+        var hits = _searchService.Search(new[] { new Note { Id = Guid.NewGuid(), Content = content } }, "apple");
+
+        Assert.AreEqual(1, hits.Count, "行 8 与行 9 行距 1 ≤ 2 应合并为单卡");
+        Assert.AreEqual("8-9", hits[0].DisplayLineNumber);
+        Assert.AreEqual(8, hits[0].LineNumber, "合并卡片逻辑行号取组内首命中行");
+
+        // 跳转选区覆盖组内首个命中词起点至末个命中词终点
+        int first = content.IndexOf("apple", StringComparison.OrdinalIgnoreCase);
+        int last = content.LastIndexOf("apple", StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(first, hits[0].CharIndex);
+        Assert.AreEqual(last + "apple".Length, hits[0].CharIndex + hits[0].Length);
+
+        // 上下文窗口为合并区间 8~9 各外扩一行：行 7~10 共 4 行
+        Assert.AreEqual(4, hits[0].Lines.Count);
+        Assert.AreEqual("第 8-9 行 · 共 2 处", hits[0].BadgeText);
+    }
+
+    [TestMethod]
+    public void Search_Tier2_ShouldSpanFromFirstTokenToLastToken()
+    {
+        var content = "use Cloudflare for R2 storage";
+        var hits = _searchService.Search(new[] { new Note { Id = Guid.NewGuid(), Content = content } }, "Cloudflare R2");
+
+        Assert.AreEqual(1, hits.Count);
+        Assert.AreEqual(2, hits[0].Tier, "短语未连续出现但全部分词同行应定级 Tier 2");
+        int first = content.IndexOf("Cloudflare", StringComparison.OrdinalIgnoreCase);
+        int lastEnd = content.IndexOf("R2", StringComparison.OrdinalIgnoreCase) + 2;
+        Assert.AreEqual(first, hits[0].CharIndex, "选区起点应为首 token 起点");
+        Assert.AreEqual(lastEnd - first, hits[0].Length, "选区跨度应覆盖到末 token 结尾");
+    }
+
+    [TestMethod]
+    public void Search_CrossLineFallback_ShouldNotThrowOrReturnEmpty()
+    {
+        // 关键词本身携带换行（仅可直接调用服务时出现）：行级必然无法命中，走全文兜底
+        var note = new Note { Id = Guid.NewGuid(), Content = "open\nrouter" };
+        var hits = _searchService.Search(new[] { note }, "open\nrouter");
+
+        Assert.AreEqual(1, hits.Count, "兜底路径必须产出卡片防空列表");
+        Assert.AreEqual(3, hits[0].Tier);
+        Assert.AreEqual(1, hits[0].LineNumber);
+        Assert.AreEqual(0, hits[0].CharIndex);
+        Assert.AreEqual(1, hits[0].TotalMatches);
+    }
+
+    [TestMethod]
+    public void Search_SameNoteMixedTiers_ShouldRankByTier_ThenLineNumber()
+    {
+        // 同一便签内：行 1 Tier 3（仅分词）、行 5 Tier 2（同行全词）、行 9 Tier 1（完整短语），行距均 4 不合并
+        var lines = new List<string>
+        {
+            "Cloudflare 帐号",
+            "filler", "filler", "filler",
+            "use Cloudflare for R2",
+            "filler", "filler", "filler",
+            "Cloudflare R2 User Token",
+        };
+        var content = string.Join("\n", lines);
+
+        var hits = _searchService.Search(new[] { new Note { Id = Guid.NewGuid(), Content = content } }, "Cloudflare R2");
+
+        Assert.AreEqual(3, hits.Count, "行距 4 的三行不合并");
+        Assert.IsTrue(hits.Select(h => h.NoteId).Distinct().Count() == 1, "同便签卡片应保持相邻");
+        Assert.AreEqual(1, hits[0].Tier);
+        Assert.AreEqual(9, hits[0].LineNumber, "同便签内 Tier 1 卡片排最前（质量优先于行号）");
+        Assert.AreEqual(2, hits[1].Tier);
+        Assert.AreEqual(5, hits[1].LineNumber);
+        Assert.AreEqual(3, hits[2].Tier);
+        Assert.AreEqual(1, hits[2].LineNumber);
+    }
+
+    [TestMethod]
+    public void Search_SingleHit_BadgeText_ShouldShowLineNumberOnly()
+    {
+        var hits = _searchService.Search(
+            new[] { new Note { Id = Guid.NewGuid(), Content = "第一行\n第二行 目标\n第三行" } }, "目标");
+
+        Assert.AreEqual(1, hits.Count);
+        Assert.AreEqual(1, hits[0].TotalMatches);
+        Assert.AreEqual("第 2 行", hits[0].BadgeText, "单处命中胶囊不应带「共 N 处」后缀");
+    }
+
+    [TestMethod]
     public void Search_MultiWord_OpenRouter_ShouldMatch_CompactAndTokens()
     {
         // 场景 1：用户搜 "open router" (有空格)，便签内容是 "OpenRouter" (连写)

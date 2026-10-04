@@ -48,6 +48,23 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
     private int _searchHitCount;
 
     [ObservableProperty]
+    private int _searchNoteCount;
+
+    /// <summary>
+    /// 搜索状态栏文案：卡片数可能大于便签数（多命中扁平展开），
+    /// 两者相等时维持原「N 条匹配便签」口径，否则明确「来自 M 张便签」
+    /// </summary>
+    public string SearchStatusText => SearchHitCount == 0
+        ? string.Empty
+        : SearchHitCount == SearchNoteCount
+            ? $"找到 {SearchHitCount} 条匹配便签 (回车或点击直达)"
+            : $"找到 {SearchHitCount} 条结果 (来自 {SearchNoteCount} 张便签，回车或点击直达)";
+
+    partial void OnSearchHitCountChanged(int value) => OnPropertyChanged(nameof(SearchStatusText));
+
+    partial void OnSearchNoteCountChanged(int value) => OnPropertyChanged(nameof(SearchStatusText));
+
+    [ObservableProperty]
     private bool _hasNoNotes;
 
     public NotesListViewModel(
@@ -176,6 +193,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
             IsSearching = false;
             SearchResults.Clear();
             SearchHitCount = 0;
+            SearchNoteCount = 0;
             return;
         }
 
@@ -206,6 +224,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
                         SearchResults.Add(hit);
                     }
                     SearchHitCount = hits.Count;
+                    SearchNoteCount = hits.Select(h => h.NoteId).Distinct().Count();
                 }
 
                 var app = System.Windows.Application.Current;
