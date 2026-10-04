@@ -36,6 +36,32 @@ public sealed class WindowManager
     /// <summary>
     /// 打开或将已打开的便签贴纸窗口激活至最前
     /// </summary>
+    /// <summary>
+    /// 同步下行应用后，刷新已打开便签窗口的内存内容（协议设计 §4）。
+    /// 仅刷新「无未落盘改动」的窗口（<see cref="NoteViewModel.HasPendingChanges"/>），
+    /// 正在输入的窗口以本机在途编辑为准，不在此处强行覆盖。
+    /// </summary>
+    public async Task RefreshOpenNoteContentsAsync(IReadOnlyCollection<Guid> noteIds)
+    {
+        foreach (var noteId in noteIds)
+        {
+            if (!_activeNoteWindows.TryGetValue(noteId, out var window)) continue;
+            if (window.DataContext is not NoteViewModel vm) continue;
+            if (vm.HasPendingChanges) continue;
+
+            var fresh = await _repository.GetByIdAsync(noteId).ConfigureAwait(true);
+            if (fresh == null) continue;
+            if (fresh.UpdatedAt <= vm.Note.UpdatedAt) continue;
+
+            // Initialize 会抑制防抖保存等副作用，是安全的重灌路径
+            vm.Initialize(fresh);
+            AppLog.Info($"[WindowManager] 已按远端最新内容刷新打开中的便签 {noteId}");
+        }
+    }
+
+    /// <summary>
+    /// 打开或将已打开的便签贴纸窗口激活至最前
+    /// </summary>
     public NoteWindow OpenOrActivateNote(Note note, Action<NoteWindow>? onReady = null)
     {
         if (_activeNoteWindows.TryGetValue(note.Id, out var existingWindow))

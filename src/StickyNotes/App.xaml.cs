@@ -6,6 +6,7 @@ using Microsoft.Win32;
 using StickyNotes.Data;
 using StickyNotes.Infrastructure;
 using StickyNotes.Services;
+using StickyNotes.Sync;
 using StickyNotes.ViewModels;
 using StickyNotes.Views;
 
@@ -159,6 +160,16 @@ public partial class App : Application
             AppLog.Error($"[App] 全局热键初始化失败（应用继续运行，仅缺少全局热键）: {ex.Message}", ex);
         }
 
+        // 9a. 启动网络同步触发器（未启用同步时内部为空转，失败不影响主流程）
+        try
+        {
+            _serviceProvider.GetRequiredService<SyncHost>().Start();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[App] 同步服务启动失败（应用继续运行，仅缺少网络同步）: {ex.Message}", ex);
+        }
+
         // 10. 管理中心主窗口呈现（若携带 --autostart 或 --minimized 参数，则保持托盘静默不弹窗）。
         // 主窗口是最后的功能底线：创建/呈现失败时给出可读提示并安全退出，而非无声闪退。
         try
@@ -271,6 +282,9 @@ public partial class App : Application
             // 3. 将所有待写脏数据直接写入 SQLite，绝不走 UI 消息总线，防止死锁
             _serviceProvider?.GetService<AutoSaveCoordinator>()?.FlushAllDirectToStorage();
 
+            // 4. 停止同步触发器与后端连接（先落盘再停同步，保证退出前最后一批修改已入库）
+            _serviceProvider?.GetService<SyncHost>()?.Dispose();
+
             AppLog.Info("[App] 退出前安全落盘完成");
         }
         catch (Exception ex)
@@ -306,12 +320,17 @@ public partial class App : Application
         services.AddSingleton<PinService>();
         services.AddSingleton<ExportImportService>();
         services.AddSingleton<ISearchService, SearchService>();
-        services.AddSingleton<AutoSaveCoordinator>(sp => 
+        services.AddSingleton<AutoSaveCoordinator>(sp =>
             new AutoSaveCoordinator(sp.GetRequiredService<INoteRepository>()));
         services.AddSingleton<WindowManager>();
         services.AddSingleton<AutoStartService>();
         services.AddSingleton<HotKeyService>();
         services.AddSingleton<TrayIconService>();
+
+        // 网络同步
+        services.AddSingleton<SyncEngine>();
+        services.AddSingleton<SyncStateStore>();
+        services.AddSingleton<SyncHost>();
 
         // ViewModels
         services.AddSingleton<NotesListViewModel>();

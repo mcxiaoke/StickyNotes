@@ -156,6 +156,11 @@ public static class AppPaths
     public static string SettingsPath => Path.Combine(DataDirectory, "settings.json");
 
     /// <summary>
+    /// 网络同步运行时状态文件路径（最近成功时间/错误摘要，与用户设置分离）
+    /// </summary>
+    public static string SyncStatePath => Path.Combine(DataDirectory, "sync_state.json");
+
+    /// <summary>
     /// 本地轮转备份目录
     /// </summary>
     public static string BackupsDirectory

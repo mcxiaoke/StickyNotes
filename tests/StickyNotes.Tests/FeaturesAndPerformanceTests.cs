@@ -387,6 +387,9 @@ public class FeaturesAndPerformanceTests
         public Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Notes.FirstOrDefault(n => n.Id == id));
 
+        public Task<ApplyRemoteResult> ApplyRemoteBatchAsync(IEnumerable<RemoteApplyItem> items, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ApplyRemoteResult(0, 0));
+
         public Task SaveAsync(Note note, CancellationToken cancellationToken = default)
         {
             var idx = Notes.FindIndex(n => n.Id == note.Id);
