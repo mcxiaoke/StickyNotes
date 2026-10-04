@@ -70,6 +70,43 @@ public class FeaturesAndPerformanceTests
         Assert.IsTrue(avgMultiWordMs < 30.0, $"1000 张便签多词搜索应在 30ms 内完成，实际: {avgMultiWordMs} ms");
     }
 
+    /// <summary>
+    /// 搜索多命中重构（全行扫描 + Tier 分级 + 相邻合并）的退化防护：
+    /// 取消早停 break 后，代价集中在「单张超长便签」场景，与 1000 张短便签基准互补。
+    /// </summary>
+    [TestMethod]
+    public void Benchmark_Search_VeryLongNote_5000Lines()
+    {
+        var searchService = new SearchService();
+        var lines = new List<string>(5000);
+        for (int i = 0; i < 5000; i++)
+        {
+            lines.Add(i % 50 == 0
+                ? $"Line {i} Cloudflare R2 configuration item with moderate length text"
+                : $"Line {i} filler content without any keyword here");
+        }
+        var note = new Note { Id = Guid.NewGuid(), Content = string.Join("\n", lines) };
+
+        // 预热 JIT
+        _ = searchService.Search(new[] { note }, "Cloudflare R2");
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < 50; i++)
+        {
+            _ = searchService.Search(new[] { note }, "Cloudflare R2");
+        }
+        sw.Stop();
+        double avgMs = sw.Elapsed.TotalMilliseconds / 50.0;
+
+        TestContext.WriteLine($"[BenchmarkResult] 5000行超长单便签: 多词搜索 = {avgMs:F3} ms");
+        Assert.IsTrue(avgMs < 20.0, $"5000 行单便签多词搜索应在 20ms 内完成，实际: {avgMs} ms");
+
+        // 行为断言：100 处分散命中（行距 50 不合并）→ Cap 截断为 3 张卡片
+        var hits = searchService.Search(new[] { note }, "Cloudflare R2");
+        Assert.AreEqual(3, hits.Count, "超长便签命中卡片数应被截断为上限 3");
+        Assert.AreEqual(1, hits[0].Tier);
+    }
+
     [TestInitialize]
     public void Setup()
     {

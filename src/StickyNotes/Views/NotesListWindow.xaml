@@ -165,7 +165,7 @@
                                Text="双击卡片打开" />
                 </Grid>
 
-                <!-- 搜索状态：显示命中统计提示 -->
+                <!-- 搜索状态：显示命中统计提示（卡片数与便签数分离，扁平多卡片时明确来源） -->
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center"
                             Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -173,9 +173,8 @@
                     <TextBlock Style="{StaticResource Type.Caption}"
                                Foreground="{StaticResource Fluent.AccentBrush}"
                                FontWeight="SemiBold"
-                               AutomationProperties.LiveSetting="Polite">
-                        <Run Text="找到 " /><Run Text="{Binding SearchHitCount, Mode=OneWay}" /><Run Text=" 张匹配便签 (回车或点击直达)" />
-                    </TextBlock>
+                               AutomationProperties.LiveSetting="Polite"
+                               Text="{Binding SearchStatusText, Mode=OneWay}" />
                 </StackPanel>
             </Grid>
 
@@ -468,9 +467,8 @@
                                                         Padding="6,2">
                                                     <TextBlock Style="{StaticResource Type.CaptionSubtle}"
                                                                FontWeight="SemiBold"
-                                                               Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}">
-                                                        <Run Text="第 " /><Run Text="{Binding LineNumber}" /><Run Text=" 行" />
-                                                    </TextBlock>
+                                                               Foreground="{Binding Color, Converter={StaticResource NoteColorToTextConverter}}"
+                                                               Text="{Binding BadgeText, Mode=OneWay}" />
                                                 </Border>
                                             </StackPanel>
                                         </Grid>
