@@ -343,6 +343,151 @@ public sealed class NoteRepository : INoteRepository
         }
     }
 
+    /// <summary>
+    /// 应用远端同步批次（单事务，下行守卫）。
+    /// 守卫语义：快照后本地又被编辑（UpdatedAt 变化）的行本轮跳过，下一轮对账重新裁决，
+    /// 保证「对账读快照 → 下载解析 → 写库」窗口内的用户输入不被远端覆盖（协议设计 §4.1）。
+    /// </summary>
+    public async Task<ApplyRemoteResult> ApplyRemoteBatchAsync(IEnumerable<RemoteApplyItem> items, CancellationToken cancellationToken = default)
+    {
+        var list = items.ToList();
+        if (list.Count == 0) return new ApplyRemoteResult(0, 0);
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+
+        int applied = 0;
+        int guarded = 0;
+
+        try
+        {
+            foreach (var item in list)
+            {
+                var note = item.Note;
+                var currentUpdatedAt = await TryGetUpdatedAtAsync(connection, tx, note.Id, cancellationToken).ConfigureAwait(false);
+
+                if (currentUpdatedAt == null)
+                {
+                    // 本地无此行：按协议强制「几何默认落点 + IsOpen=false」插入（不自动弹窗），
+                    // 不信任调用方携带的几何/打开状态（协议设计 §3.2）
+                    var insertNote = new Note
+                    {
+                        Id = note.Id,
+                        Content = note.Content,
+                        Color = note.Color,
+                        IsPinnedInList = note.IsPinnedInList,
+                        AlwaysOnTop = note.AlwaysOnTop,
+                        IsDeleted = note.IsDeleted,
+                        IsOpen = false,
+                        CreatedAt = note.CreatedAt,
+                        UpdatedAt = note.UpdatedAt
+                    };
+                    await UpsertNoteCommandAsync(connection, tx, insertNote, cancellationToken).ConfigureAwait(false);
+                    applied++;
+                }
+                else if (item.SnapshotUpdatedAt != null && currentUpdatedAt.Value.Equals(item.SnapshotUpdatedAt.Value))
+                {
+                    // 快照后未被本地编辑：覆盖业务字段，窗口几何与 IsOpen 保持本地现状
+                    var command = connection.CreateCommand();
+                    command.Transaction = (SqliteTransaction)tx;
+                    command.CommandText = """
+                        UPDATE Notes SET
+                            Content = $content,
+                            Color = $color,
+                            IsPinned = $isPinned,
+                            IsPinnedInList = $isPinnedInList,
+                            AlwaysOnTop = $alwaysOnTop,
+                            IsDeleted = $isDeleted,
+                            UpdatedAt = $updatedAt
+                        WHERE Id = $id;
+                        """;
+                    command.Parameters.AddWithValue("$content", note.Content);
+                    command.Parameters.AddWithValue("$color", (int)note.Color);
+                    command.Parameters.AddWithValue("$isPinned", note.IsPinnedInList ? 1 : 0);
+                    command.Parameters.AddWithValue("$isPinnedInList", note.IsPinnedInList ? 1 : 0);
+                    command.Parameters.AddWithValue("$alwaysOnTop", note.AlwaysOnTop ? 1 : 0);
+                    command.Parameters.AddWithValue("$isDeleted", note.IsDeleted ? 1 : 0);
+                    command.Parameters.AddWithValue("$updatedAt", SyncProtocolEnsureUtc(note.UpdatedAt).ToString("o", CultureInfo.InvariantCulture));
+                    command.Parameters.AddWithValue("$id", note.Id.ToString());
+                    await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    applied++;
+                }
+                else
+                {
+                    guarded++;
+                    AppLog.Info($"[NoteRepository] 下行守卫生效：便签 {note.Id} 在对账窗口内被本地编辑，本轮跳过远端覆盖");
+                }
+            }
+
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+
+        return new ApplyRemoteResult(applied, guarded);
+    }
+
+    /// <summary>读取行内 UpdatedAt（round-trip 解析）；行不存在返回 null</summary>
+    private static async Task<DateTime?> TryGetUpdatedAtAsync(
+        SqliteConnection connection, System.Data.Common.DbTransaction tx, Guid id, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = (SqliteTransaction)tx;
+        command.CommandText = "SELECT UpdatedAt FROM Notes WHERE Id = $id;";
+        command.Parameters.AddWithValue("$id", id.ToString());
+
+        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        if (result == null || result == DBNull.Value) return null;
+
+        return DateTime.Parse((string)result, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+    }
+
+    /// <summary>整行 Upsert（与 SaveBatchAsync 相同的 SQL，供插入远端新便签复用）</summary>
+    private static async Task UpsertNoteCommandAsync(
+        SqliteConnection connection, System.Data.Common.DbTransaction tx, Note note, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = (SqliteTransaction)tx;
+        command.CommandText = """
+            INSERT INTO Notes (
+                Id, Content, Color, IsPinned, IsPinnedInList, AlwaysOnTop, IsDeleted,
+                WindowX, WindowY, WindowWidth, WindowHeight, IsOpen,
+                CreatedAt, UpdatedAt
+            ) VALUES (
+                $id, $content, $color, $isPinned, $isPinnedInList, $alwaysOnTop, $isDeleted,
+                $windowX, $windowY, $windowWidth, $windowHeight, $isOpen,
+                $createdAt, $updatedAt
+            )
+            ON CONFLICT(Id) DO UPDATE SET
+                Content = excluded.Content,
+                Color = excluded.Color,
+                IsPinned = excluded.IsPinned,
+                IsPinnedInList = excluded.IsPinnedInList,
+                AlwaysOnTop = excluded.AlwaysOnTop,
+                IsDeleted = excluded.IsDeleted,
+                WindowX = excluded.WindowX,
+                WindowY = excluded.WindowY,
+                WindowWidth = excluded.WindowWidth,
+                WindowHeight = excluded.WindowHeight,
+                IsOpen = excluded.IsOpen,
+                UpdatedAt = excluded.UpdatedAt;
+            """;
+
+        BindNoteParameters(command, note);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>确保 Kind 为 UTC（库内时间戳全链路 "o" + UTC，解析/比较前统一口径）</summary>
+    private static DateTime SyncProtocolEnsureUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
+
     private static void BindNoteParameters(SqliteCommand command, Note note)
     {
         command.Parameters.AddWithValue("$id", note.Id.ToString());

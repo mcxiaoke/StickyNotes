@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.Messaging;
 using StickyNotes.Infrastructure;
 using StickyNotes.Messages;
+using StickyNotes.Sync;
 
 namespace StickyNotes.Services;
 
@@ -11,6 +12,11 @@ namespace StickyNotes.Services;
 /// </summary>
 public sealed class AppSettings
 {
+    /// <summary>
+    /// 网络同步配置（协议设计见 docs/SYNC-PROTOCOL-DESIGN-20261004.md）
+    /// </summary>
+    public SyncSettings Sync { get; set; } = new();
+
     /// <summary>
     /// 便签贴纸正文字体大小（pt）
     /// </summary>

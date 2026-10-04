@@ -415,6 +415,9 @@ public class SettingsAndBackupTests
         public Task<Note?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(_notes.FirstOrDefault(n => n.Id == id));
 
+        public Task<ApplyRemoteResult> ApplyRemoteBatchAsync(IEnumerable<RemoteApplyItem> items, CancellationToken ct = default) =>
+            Task.FromResult(new ApplyRemoteResult(0, 0));
+
         public Task SaveAsync(Note note, CancellationToken ct = default)
         {
             var idx = _notes.FindIndex(n => n.Id == note.Id);

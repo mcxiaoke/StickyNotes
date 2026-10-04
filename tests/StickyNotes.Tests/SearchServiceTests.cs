@@ -463,5 +463,7 @@ public class SearchServiceTests
         public Task ClearAllArchivedAsync(CancellationToken ct = default) => Task.CompletedTask;
         public Task UpdateWindowBoundsAsync(Guid id, double x, double y, double width, double height, bool isOpen, CancellationToken ct = default) => Task.CompletedTask;
         public Task UpdateWindowPlacementAsync(Guid id, double x, double y, double width, double height, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<ApplyRemoteResult> ApplyRemoteBatchAsync(IEnumerable<RemoteApplyItem> items, CancellationToken ct = default) =>
+            Task.FromResult(new ApplyRemoteResult(0, 0));
     }
 }

@@ -32,6 +32,9 @@ public class UiRenderingAndScreenshotTests
         public Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Notes.FirstOrDefault(n => n.Id == id));
 
+        public Task<ApplyRemoteResult> ApplyRemoteBatchAsync(IEnumerable<RemoteApplyItem> items, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ApplyRemoteResult(0, 0));
+
         public Task SaveAsync(Note note, CancellationToken cancellationToken = default)
         {
             var idx = Notes.FindIndex(n => n.Id == note.Id);
@@ -782,6 +785,43 @@ public class UiRenderingAndScreenshotTests
             var win = new SettingsWindow(vm);
             TestEnvironment.SaveWindowSnapshot(win, 480, 680, "09_SettingsWindow.png");
         });
+    }
+
+    [TestMethod]
+    public void Render_SettingsWindow_SyncCard_SavesSnapshot()
+    {
+        TestEnvironment.RunInSta(() =>
+        {
+            var repo = new FakeNoteRepository();
+            var settingsService = TestEnvironment.CreateSettingsService();
+            var backupService = new ExportImportService(repo);
+            var vm = new SettingsViewModel(settingsService, backupService);
+
+            var win = new SettingsWindow(vm);
+
+            // 先呈现并滚动到「网络同步」卡片，再交给快照工具（窗口已可见时 Show 为幂等）
+            win.Show();
+            var scrollViewer = FindDescendant<ScrollViewer>(win);
+            Assert.IsNotNull(scrollViewer, "设置窗口应包含 ScrollViewer");
+            scrollViewer.ScrollToEnd();
+            win.UpdateLayout();
+
+            TestEnvironment.SaveWindowSnapshot(win, 480, 980, "09b_SettingsWindow_Sync.png");
+        });
+    }
+
+    private static T? FindDescendant<T>(System.Windows.DependencyObject root) where T : System.Windows.DependencyObject
+    {
+        var count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T match) return match;
+            var nested = FindDescendant<T>(child);
+            if (nested != null) return nested;
+        }
+
+        return null;
     }
 
     [TestMethod]

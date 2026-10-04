@@ -480,6 +480,9 @@ public class ConcurrencyAndDecouplingTests
         public Task<Note?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult<Note?>(null);
 
+        public Task<ApplyRemoteResult> ApplyRemoteBatchAsync(IEnumerable<RemoteApplyItem> items, CancellationToken ct = default) =>
+            Task.FromResult(new ApplyRemoteResult(0, 0));
+
         public Task SaveBatchAsync(IEnumerable<Note> notes, CancellationToken ct = default) =>
             Task.WhenAll(notes.Select(n => SaveAsync(n, ct)));
 
