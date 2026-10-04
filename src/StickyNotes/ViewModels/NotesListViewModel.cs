@@ -184,7 +184,14 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
         }
     }
 
-    partial void OnSearchTextChanged(string value)
+    partial void OnSearchTextChanged(string value) => QueueSearch(value);
+
+    /// <summary>
+    /// 搜索触发的唯一入口：空词清空结果并退出搜索态，非空词取消在途搜索后经 80ms 防抖后台执行。
+    /// 搜索框输入（属性变更）与数据变更回调（内容/元数据/删除/恢复）统一走这里，
+    /// 后者不再手动重入 <c>OnSearchTextChanged</c> 属性回调，消除「属性回调身兼两职」的耦合（原 F-P2-19）。
+    /// </summary>
+    private void QueueSearch(string? value)
     {
         CancelCurrentSearch();
 
@@ -218,6 +225,14 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
                 void UpdateUi()
                 {
                     if (token.IsCancellationRequested) return;
+
+                    // 结果序列与当前完全一致时跳过重建：多命中卡片下用户常在结果间导航，
+                    // 后台内容/元数据变更引发的重复触发不应冲掉选中项与滚动位置
+                    if (IsSameResultSequence(SearchResults, hits))
+                    {
+                        return;
+                    }
+
                     SearchResults.Clear();
                     foreach (var hit in hits)
                     {
@@ -236,7 +251,18 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
                     }
                     else
                     {
-                        app.Dispatcher.Invoke(UpdateUi);
+                        // InvokeAsync 而非同步 Invoke（原 F-P2-20）：不阻塞后台线程等 UI，
+                        // 退出竞态下的异常经 Task 观察并记录，不静默丢失也不阻塞搜索任务
+                        _ = app.Dispatcher.InvokeAsync(UpdateUi).Task.ContinueWith(
+                            t =>
+                            {
+                                if (t.IsFaulted && t.Exception != null)
+                                {
+                                    var inner = t.Exception.GetBaseException();
+                                    AppLog.Error($"[NotesListViewModel] 搜索结果更新失败: {inner.Message}", inner);
+                                }
+                            },
+                            TaskContinuationOptions.OnlyOnFaulted);
                     }
                 }
                 else
@@ -255,6 +281,33 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
                 AppLog.Error($"[NotesListViewModel] 搜索执行异常: {ex.Message}", ex);
             }
         }, token);
+    }
+
+    /// <summary>
+    /// 判定新命中序列与当前列表是否完全一致（NoteId + 行号 + 选区 + 分级逐项比对）。
+    /// 一致即视为「数据虽有变化但未影响搜索结果」，跳过 UI 重建以保住选中与滚动。
+    /// </summary>
+    private static bool IsSameResultSequence(
+        System.Collections.ObjectModel.ObservableCollection<SearchHit> current,
+        IReadOnlyList<SearchHit> next)
+    {
+        if (current.Count != next.Count) return false;
+
+        for (int i = 0; i < next.Count; i++)
+        {
+            var a = current[i];
+            var b = next[i];
+            if (a.NoteId != b.NoteId
+                || a.LineNumber != b.LineNumber
+                || a.CharIndex != b.CharIndex
+                || a.Length != b.Length
+                || a.Tier != b.Tier)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     [RelayCommand]
@@ -324,7 +377,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
 
         if (IsSearching)
         {
-            OnSearchTextChanged(SearchText);
+            QueueSearch(SearchText);
         }
     }
 
@@ -368,7 +421,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
             UpdateSearchSnapshot();
             if (IsSearching)
             {
-                OnSearchTextChanged(SearchText);
+                QueueSearch(SearchText);
             }
         };
 
@@ -421,7 +474,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
 
             if (IsSearching)
             {
-                OnSearchTextChanged(SearchText);
+                QueueSearch(SearchText);
             }
         };
 
@@ -451,7 +504,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
             UpdateSearchSnapshot();
             if (IsSearching)
             {
-                OnSearchTextChanged(SearchText);
+                QueueSearch(SearchText);
             }
         });
     }
@@ -486,7 +539,7 @@ public partial class NotesListViewModel : ObservableObject, IDisposable
                 UpdateSearchSnapshot();
                 if (IsSearching)
                 {
-                    OnSearchTextChanged(SearchText);
+                    QueueSearch(SearchText);
                 }
             }
         });
