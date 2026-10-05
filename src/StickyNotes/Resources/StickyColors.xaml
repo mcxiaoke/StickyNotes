@@ -1,23 +1,41 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Fluent 语义系统画刷 -->
-    <SolidColorBrush x:Key="Fluent.AccentBrush" Color="#0078D4" />
-    <SolidColorBrush x:Key="Fluent.AccentHoverBrush" Color="#1084D9" />
-    <SolidColorBrush x:Key="Fluent.AccentPressedBrush" Color="#006CBE" />
-    <SolidColorBrush x:Key="Fluent.AccentLightBgBrush" Color="#EBF3FC" />
-    <SolidColorBrush x:Key="Fluent.AccentLightBorderBrush" Color="#CCE4F7" />
-    <SolidColorBrush x:Key="Fluent.DangerBrush" Color="#C42B1C" />
-    <SolidColorBrush x:Key="Fluent.DangerHoverBrush" Color="#E81123" />
-    <SolidColorBrush x:Key="Fluent.DangerLightBgBrush" Color="#FDE7E9" />
-    <SolidColorBrush x:Key="Fluent.TextPrimaryBrush" Color="#202020" />
-    <SolidColorBrush x:Key="Fluent.TextSecondaryBrush" Color="#5C5C60" />
-    <SolidColorBrush x:Key="Fluent.TextTertiaryBrush" Color="#8E8E93" />
-    <SolidColorBrush x:Key="Fluent.SubtleBorderBrush" Color="#1E000000" />
-    <SolidColorBrush x:Key="Fluent.ControlBorderBrush" Color="#26000000" />
+    <!-- =========================================================================
+         Fluent 语义系统画刷 · Material Design 3 语义色
+         色源：temp/material-theme.json（Material Theme Builder 导出，seed #0064B5）
+         本轮仅落地 light 方案；后续接入深色时，此处拆分为 Theme.Light.xaml /
+         Theme.Dark.xaml 并用 ThemeDictionaries 承载，键名保持不变。
+         下方 7 组 Sticky.* 便签色属于内容色（用户自选贴纸颜色），与界面语义色
+         是正交维度，不参与 M3 映射。
+         ========================================================================= -->
+
+    <!-- 主色 -->
+    <SolidColorBrush x:Key="Fluent.AccentBrush" Color="#3B608F" />
+    <SolidColorBrush x:Key="Fluent.AccentHoverBrush" Color="#2D79CB" />
+    <SolidColorBrush x:Key="Fluent.AccentPressedBrush" Color="#004784" />
+    <SolidColorBrush x:Key="Fluent.AccentLightBgBrush" Color="#D4E3FF" />
+    <SolidColorBrush x:Key="Fluent.AccentLightBorderBrush" Color="#214876" />
+
+    <!-- 危险操作 -->
+    <SolidColorBrush x:Key="Fluent.DangerBrush" Color="#BA1A1A" />
+    <SolidColorBrush x:Key="Fluent.DangerHoverBrush" Color="#93000A" />
+    <SolidColorBrush x:Key="Fluent.DangerLightBgBrush" Color="#FFDAD6" />
+
+    <!-- 文本层级 -->
+    <SolidColorBrush x:Key="Fluent.TextPrimaryBrush" Color="#191C20" />
+    <SolidColorBrush x:Key="Fluent.TextSecondaryBrush" Color="#43474E" />
+    <SolidColorBrush x:Key="Fluent.TextTertiaryBrush" Color="#73777F" />
+
+    <!-- 描边：M3 全程使用不透明色。原 #1E000000 / #26000000 半透明黑
+         在深色背景上等同隐形，接入深色主题前必须换掉。 -->
+    <SolidColorBrush x:Key="Fluent.SubtleBorderBrush" Color="#C3C6CF" />
+    <SolidColorBrush x:Key="Fluent.ControlBorderBrush" Color="#C3C6CF" />
+
+    <!-- 表面层级 -->
     <SolidColorBrush x:Key="Fluent.CardDefaultBgBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Fluent.CardBgBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Fluent.WindowBgBrush" Color="#F9F9FB" />
+    <SolidColorBrush x:Key="Fluent.CardBgBrush" Color="#F2F3FA" />
+    <SolidColorBrush x:Key="Fluent.WindowBgBrush" Color="#F9F9FF" />
 
     <!-- 1. 经典黄 Yellow -->
     <Color x:Key="Sticky.Yellow.BgColor">#FFF7D1</Color>
