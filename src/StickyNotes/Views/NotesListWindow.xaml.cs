@@ -20,6 +20,8 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 {
     private readonly SettingsService? _settingsService;
     private readonly PinService? _pinService;
+    private readonly SyncHost? _syncHost;
+    private bool _isManualSyncing;
 
     /// <summary>闲时自动关闭计时器：窗口持续不在前台达到设定分钟数后自动收起</summary>
     private readonly DispatcherTimer _idleCloseTimer = new() { Interval = TimeSpan.FromMinutes(10) };
@@ -29,12 +31,17 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     /// <summary>列表内容当前是否处于已解锁可见状态（供归档窗口判断是否需要初始锁定）</summary>
     public bool IsContentAccessible => IsVisible && !PinOverlay.IsLocked;
 
-    public NotesListWindow(NotesListViewModel viewModel, SettingsService? settingsService = null, PinService? pinService = null)
+    public NotesListWindow(
+        NotesListViewModel viewModel,
+        SettingsService? settingsService = null,
+        PinService? pinService = null,
+        SyncHost? syncHost = null)
     {
         InitializeComponent();
         DataContext = viewModel;
         _settingsService = settingsService;
         _pinService = pinService;
+        _syncHost = syncHost;
         PinOverlay.PinService = pinService;
 
         Loaded += async (_, _) =>
@@ -247,6 +254,75 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     private void OpenArchiveButton_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.OpenArchiveCommand.Execute(null);
+    }
+
+    /// <summary>
+    /// 手动「立即同步」（协议设计 §6 触发时机 5）：走<see cref="SyncHost.SyncNowAsync"/>统一入口，
+    /// 单飞由引擎兜底；同步期间按钮置忙，完成后刷新列表（下行应用由 SyncHost 广播重载消息）。
+    /// </summary>
+    private async void SyncNowButton_Click(object sender, RoutedEventArgs e)
+    {
+        // 重入保护：本窗口内同步未结束前不重复发起（引擎单飞仅拦引擎侧，这里先给出可见反馈）
+        if (_isManualSyncing) return;
+
+        if (_syncHost == null)
+        {
+            MessageBox.Show("同步功能尚未初始化。", "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var sync = _settingsService?.Settings.Sync;
+        if (sync == null || !sync.Enabled)
+        {
+            MessageBox.Show("请先在「设置 → 网络同步」中启用同步。", "立即同步", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (!sync.IsConfigured)
+        {
+            MessageBox.Show("同步服务器信息尚未填写完整，请先在「设置 → 网络同步」中配置并保存。",
+                "立即同步", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        _isManualSyncing = true;
+        SetSyncNowBusy(true);
+        try
+        {
+            var summary = await _syncHost.SyncNowAsync("manual");
+            if (summary == null)
+            {
+                // null 有三种来源：引擎单飞放弃、后端构建失败、或本轮已被异常吞掉并记入 LastError
+                var error = _syncHost.CurrentState.LastError;
+                MessageBox.Show(
+                    string.IsNullOrEmpty(error)
+                        ? "本次同步未执行（上一轮同步尚未结束）。"
+                        : $"同步失败：{error}",
+                    "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            MessageBox.Show(
+                $"同步完成。\n远端对象：{summary.Listed}\n下行应用：{summary.Downloaded}（守卫跳过 {summary.GuardedSkipped}）\n上传：{summary.Uploaded}",
+                "立即同步", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[NotesListWindow] 手动同步异常: {ex.Message}", ex);
+            MessageBox.Show($"同步失败：{ex.Message}", "立即同步", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isManualSyncing = false;
+            SetSyncNowBusy(false);
+        }
+    }
+
+    /// <summary>同步进行中把按钮置为不可用并把文案换成「同步中…」，避免用户误以为点击无效</summary>
+    private void SetSyncNowBusy(bool busy)
+    {
+        SyncNowButton.IsEnabled = !busy;
+        SyncNowButton.Content = busy ? "同步中…" : "立即同步";
     }
 
     private void OpenSettingsButton_Click(object sender, RoutedEventArgs e)

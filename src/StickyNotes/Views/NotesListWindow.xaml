@@ -59,8 +59,22 @@
                                Style="{StaticResource Type.TitleLarge}" />
                 </StackPanel>
 
-                <!-- 右侧操作群：已归档、设置、新建（高度统一 32px） -->
+                <!-- 右侧操作群：立即同步、已归档、设置、新建（高度统一 32px） -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 手动立即同步按钮（协议设计 §6 触发时机 5） -->
+                    <ui:Button x:Name="SyncNowButton"
+                               Appearance="Secondary"
+                               Content="立即同步"
+                               Height="32"
+                               Padding="10,0"
+                               ToolTip="立即与云端同步一次"
+                               Margin="0,0,6,0"
+                               Click="SyncNowButton_Click">
+                        <ui:Button.Icon>
+                            <ui:SymbolIcon Symbol="ArrowSync24" FontSize="15" />
+                        </ui:Button.Icon>
+                    </ui:Button>
+
                     <!-- 已归档入口按钮 -->
                     <ui:Button Appearance="Secondary"
                                Content="已归档"
