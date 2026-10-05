@@ -192,6 +192,15 @@
                         </Grid>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <ui:Button Appearance="Primary"
+                                       Content="保存"
+                                       Padding="14,6"
+                                       Margin="0,0,10,0"
+                                       Command="{Binding SaveSyncSettingsCommand}">
+                                <ui:Button.Icon>
+                                    <ui:SymbolIcon Symbol="Save24" />
+                                </ui:Button.Icon>
+                            </ui:Button>
                             <ui:Button Appearance="Secondary"
                                        Content="测试连接"
                                        Padding="14,6"
@@ -201,7 +210,7 @@
                                     <ui:SymbolIcon Symbol="PlugConnected24" />
                                 </ui:Button.Icon>
                             </ui:Button>
-                            <ui:Button Appearance="Primary"
+                            <ui:Button Appearance="Secondary"
                                        Content="立即同步"
                                        Padding="14,6"
                                        Command="{Binding SyncNowManualCommand}">
@@ -210,6 +219,10 @@
                                 </ui:Button.Icon>
                             </ui:Button>
                         </StackPanel>
+
+                        <TextBlock Text="{Binding SaveHintText}"
+                                   Style="{StaticResource Type.CaptionSubtle}"
+                                   TextWrapping="Wrap" Margin="0,0,0,6" />
 
                         <TextBlock Text="{Binding SyncStatusText}"
                                    Style="{StaticResource Type.CaptionSubtle}"

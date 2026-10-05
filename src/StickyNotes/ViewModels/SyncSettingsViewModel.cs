@@ -1,6 +1,7 @@
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using StickyNotes.Infrastructure;
 using StickyNotes.Services;
 using StickyNotes.Sync;
 
@@ -13,24 +14,45 @@ public record SyncIntervalOption(string Label, int Minutes);
 /// <summary>
 /// 网络同步独立设置窗口 ViewModel（自 SettingsViewModel 拆分，2026-10-04）：
 /// 后端选择与凭据、测试连接、立即同步、同步状态展示。
+///
+/// 2026-10-05 改为「草稿 + 显式保存」模型：
+/// 之前所有输入框 setter 直接写 Sync 并立即落盘（每敲一个字写一次 settings.json），
+/// 且「测试连接」用界面当前值构造临时后端，等于测试一通过界面值就已替换旧配置。
+/// 现在界面所有编辑只改草稿字段，点「保存」才写回 Sync 并落盘；
+/// 「测试连接」同样只读草稿，不触碰已保存配置；关闭窗口未保存则丢弃草稿。
 /// </summary>
 public partial class SyncSettingsViewModel : ObservableObject
 {
     private readonly SettingsService _settingsService;
     private readonly SyncHost? _syncHost;
 
-    /// <summary>WebDAV 密码输入框的即时值（不落盘，保存时经 DPAPI 加密；空表示沿用已存凭据）</summary>
+    // ---- 草稿：WebDAV 密码 / S3 SecretKey 输入框的明文即时值（保存时才 DPAPI 加密落盘；空表示沿用已存凭据） ----
     private string _webDavPasswordInput = string.Empty;
-
-    /// <summary>S3 SecretKey 输入框的即时值（语义同上）</summary>
     private string _s3SecretKeyInput = string.Empty;
+
+    // ---- 草稿：其余可编辑项（保存时才写回 Sync） ----
+    private bool _syncEnabledDraft;
+    private bool _syncAllowInsecureHttpDraft;
+    private string _syncWebDavUrlDraft = string.Empty;
+    private string _syncWebDavUsernameDraft = string.Empty;
+    private string _syncS3EndpointDraft = string.Empty;
+    private string _syncS3BucketDraft = string.Empty;
+    private string _syncS3BasePrefixDraft = string.Empty;
+    private string _syncS3AccessKeyDraft = string.Empty;
+
+    /// <summary>构造期初始化草稿时抑制"未保存"标记</summary>
+    private bool _suppressDraftDirty;
 
     [ObservableProperty]
     private bool _isSyncBusy;
 
+    partial void OnIsSyncBusyChanged(bool value) => SaveSyncSettingsCommand.NotifyCanExecuteChanged();
+
+    /// <summary>草稿：存储后端（保存时才写回 Sync）</summary>
     [ObservableProperty]
     private SyncBackendType _selectedSyncBackendType;
 
+    /// <summary>草稿：后台同步间隔（分钟，保存时才写回 Sync）</summary>
     [ObservableProperty]
     private int _selectedSyncIntervalMinutes;
 
@@ -61,8 +83,29 @@ public partial class SyncSettingsViewModel : ObservableObject
         _settingsService = settingsService;
         _syncHost = syncHost;
 
-        _selectedSyncBackendType = Sync.BackendType;
-        _selectedSyncIntervalMinutes = Sync.EffectiveIntervalMinutes;
+        // 草稿初始化为当前已保存值（抑制标脏，避免打开窗口就提示"未保存"）
+        _suppressDraftDirty = true;
+        try
+        {
+            var s = Sync;
+            _syncEnabledDraft = s.Enabled;
+            _syncAllowInsecureHttpDraft = s.WebDavAllowInsecureHttp;
+            SelectedSyncBackendType = s.BackendType;
+            SelectedSyncIntervalMinutes = s.EffectiveIntervalMinutes;
+            _syncWebDavUrlDraft = s.WebDavUrl;
+            _syncWebDavUsernameDraft = s.WebDavUsername;
+            _syncS3EndpointDraft = s.S3Endpoint;
+            _syncS3BucketDraft = s.S3Bucket;
+            _syncS3BasePrefixDraft = s.S3BasePrefix;
+            _syncS3AccessKeyDraft = s.S3AccessKey;
+        }
+        finally
+        {
+            _suppressDraftDirty = false;
+        }
+
+        OnPropertyChanged(nameof(IsWebDavPanelVisible));
+        OnPropertyChanged(nameof(IsS3PanelVisible));
 
         if (_syncHost != null)
         {
@@ -74,68 +117,126 @@ public partial class SyncSettingsViewModel : ObservableObject
 
     public bool SyncEnabled
     {
-        get => Sync.Enabled;
+        get => _syncEnabledDraft;
         set
         {
-            if (Sync.Enabled == value) return;
-            Sync.Enabled = value;
-            SaveSyncSettings();
+            if (_syncEnabledDraft == value) return;
+            _syncEnabledDraft = value;
+            NotifyDraftChanged();
         }
     }
 
     /// <summary>显式允许明文 http://（内网 NAS；协议设计 §5.1）</summary>
     public bool SyncAllowInsecureHttp
     {
-        get => Sync.WebDavAllowInsecureHttp;
+        get => _syncAllowInsecureHttpDraft;
         set
         {
-            if (Sync.WebDavAllowInsecureHttp == value) return;
-            Sync.WebDavAllowInsecureHttp = value;
-            SaveSyncSettings();
+            if (_syncAllowInsecureHttpDraft == value) return;
+            _syncAllowInsecureHttpDraft = value;
+            NotifyDraftChanged();
         }
     }
 
     public string SyncWebDavUrl
     {
-        get => Sync.WebDavUrl;
-        set { if (Sync.WebDavUrl != value) { Sync.WebDavUrl = value; SaveSyncSettings(); } }
+        get => _syncWebDavUrlDraft;
+        set
+        {
+            if (_syncWebDavUrlDraft == value) return;
+            _syncWebDavUrlDraft = value ?? string.Empty;
+            NotifyDraftChanged();
+        }
     }
 
     public string SyncWebDavUsername
     {
-        get => Sync.WebDavUsername;
-        set { if (Sync.WebDavUsername != value) { Sync.WebDavUsername = value; SaveSyncSettings(); } }
+        get => _syncWebDavUsernameDraft;
+        set
+        {
+            if (_syncWebDavUsernameDraft == value) return;
+            _syncWebDavUsernameDraft = value ?? string.Empty;
+            NotifyDraftChanged();
+        }
     }
 
-    public string SyncWebDavCredentialHint =>
-        string.IsNullOrEmpty(Sync.WebDavPassword) ? "凭据：未配置" : "凭据：已保存（输入新值可替换）";
+    public string SyncWebDavCredentialHint
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(_webDavPasswordInput))
+                return "凭据：已输入新密码（保存后生效）";
+            return string.IsNullOrEmpty(Sync.WebDavPassword) ? "凭据：未配置" : "凭据：已保存（输入新值可替换）";
+        }
+    }
 
     public string SyncS3Endpoint
     {
-        get => Sync.S3Endpoint;
-        set { if (Sync.S3Endpoint != value) { Sync.S3Endpoint = value; SaveSyncSettings(); } }
+        get => _syncS3EndpointDraft;
+        set
+        {
+            if (_syncS3EndpointDraft == value) return;
+            _syncS3EndpointDraft = value ?? string.Empty;
+            NotifyDraftChanged();
+        }
     }
 
     public string SyncS3Bucket
     {
-        get => Sync.S3Bucket;
-        set { if (Sync.S3Bucket != value) { Sync.S3Bucket = value; SaveSyncSettings(); } }
+        get => _syncS3BucketDraft;
+        set
+        {
+            if (_syncS3BucketDraft == value) return;
+            _syncS3BucketDraft = value ?? string.Empty;
+            NotifyDraftChanged();
+        }
     }
 
     public string SyncS3BasePrefix
     {
-        get => Sync.S3BasePrefix;
-        set { if (Sync.S3BasePrefix != value) { Sync.S3BasePrefix = value; SaveSyncSettings(); } }
+        get => _syncS3BasePrefixDraft;
+        set
+        {
+            if (_syncS3BasePrefixDraft == value) return;
+            _syncS3BasePrefixDraft = value ?? string.Empty;
+            NotifyDraftChanged();
+        }
     }
 
     public string SyncS3AccessKey
     {
-        get => Sync.S3AccessKey;
-        set { if (Sync.S3AccessKey != value) { Sync.S3AccessKey = value; SaveSyncSettings(); } }
+        get => _syncS3AccessKeyDraft;
+        set
+        {
+            if (_syncS3AccessKeyDraft == value) return;
+            _syncS3AccessKeyDraft = value ?? string.Empty;
+            NotifyDraftChanged();
+        }
     }
 
-    public string SyncS3CredentialHint =>
-        string.IsNullOrEmpty(Sync.S3SecretKey) ? "凭据：未配置" : "凭据：已保存（输入新值可替换）";
+    public string SyncS3CredentialHint
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(_s3SecretKeyInput))
+                return "凭据：已输入新密钥（保存后生效）";
+            return string.IsNullOrEmpty(Sync.S3SecretKey) ? "凭据：未配置" : "凭据：已保存（输入新值可替换）";
+        }
+    }
+
+    /// <summary>是否有尚未落盘的编辑（决定「保存」按钮可用与提示文案）</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SaveHintText))]
+    [NotifyCanExecuteChangedFor(nameof(SaveSyncSettingsCommand))]
+    private bool _hasUnsavedChanges;
+
+    private string _saveHintText = "配置修改后需点「保存」才会写入配置文件";
+    /// <summary>保存提示行（未保存时提醒，保存后回显已保存时刻）</summary>
+    public string SaveHintText
+    {
+        get => _saveHintText;
+        private set => SetProperty(ref _saveHintText, value);
+    }
 
     private string _syncStatusText = "同步未启用";
     /// <summary>同步状态行（最近成功时间 / 最近错误摘要）</summary>
@@ -147,68 +248,109 @@ public partial class SyncSettingsViewModel : ObservableObject
 
     partial void OnSelectedSyncBackendTypeChanged(SyncBackendType value)
     {
-        Sync.BackendType = value;
-        SaveSyncSettings();
         OnPropertyChanged(nameof(IsWebDavPanelVisible));
         OnPropertyChanged(nameof(IsS3PanelVisible));
+        NotifyDraftChanged();
     }
 
     partial void OnSelectedSyncIntervalMinutesChanged(int value)
     {
-        Sync.IntervalMinutes = value;
-        SaveSyncSettings();
+        NotifyDraftChanged();
     }
 
     private SyncSettings Sync => _settingsService.Settings.Sync;
 
-    private void SaveSyncSettings()
+    /// <summary>草稿变更：仅标脏，不落盘</summary>
+    private void NotifyDraftChanged()
     {
-        _settingsService.SaveSettings();
-        _syncHost?.ApplySettingsChanged();
+        if (_suppressDraftDirty) return;
+
+        HasUnsavedChanges = true;
+        SaveHintText = "有未保存的修改，点「保存」后才会生效";
     }
 
-    /// <summary>由窗口 code-behind 在 PasswordChanged 时推送（密码框不参与 XAML 绑定）</summary>
-    public void SetWebDavPasswordInput(string password)
-    {
-        _webDavPasswordInput = password ?? string.Empty;
-        if (_webDavPasswordInput.Length == 0) return; // 清空输入框不代表清除已存凭据
-
-        Sync.WebDavPassword = CredentialProtector.Protect(_webDavPasswordInput);
-        SaveSyncSettings();
-        OnPropertyChanged(nameof(SyncWebDavCredentialHint));
-    }
-
-    /// <summary>由窗口 code-behind 在 PasswordChanged 时推送</summary>
-    public void SetS3SecretKeyInput(string secretKey)
-    {
-        _s3SecretKeyInput = secretKey ?? string.Empty;
-        if (_s3SecretKeyInput.Length == 0) return;
-
-        Sync.S3SecretKey = CredentialProtector.Protect(_s3SecretKeyInput);
-        SaveSyncSettings();
-        OnPropertyChanged(nameof(SyncS3CredentialHint));
-    }
-
-    /// <summary>用界面当前编辑值构造测试用配置（凭据取输入框新值，缺省沿用已存值）</summary>
-    private SyncSettings BuildEffectiveSyncSettings()
+    /// <summary>用草稿构造一份 SyncSettings（测试连接 / 校验用，不写回已保存配置）</summary>
+    private SyncSettings BuildDraftSyncSettings()
     {
         var s = Sync;
         return new SyncSettings
         {
-            Enabled = s.Enabled,
-            BackendType = s.BackendType,
+            Enabled = _syncEnabledDraft,
+            BackendType = SelectedSyncBackendType,
             DeviceId = s.DeviceId,
-            IntervalMinutes = s.IntervalMinutes,
-            WebDavUrl = s.WebDavUrl,
-            WebDavUsername = s.WebDavUsername,
-            WebDavAllowInsecureHttp = s.WebDavAllowInsecureHttp,
+            IntervalMinutes = SelectedSyncIntervalMinutes,
+            WebDavUrl = _syncWebDavUrlDraft,
+            WebDavUsername = _syncWebDavUsernameDraft,
+            WebDavAllowInsecureHttp = _syncAllowInsecureHttpDraft,
             WebDavPassword = _webDavPasswordInput.Length == 0 ? s.WebDavPassword : CredentialProtector.Protect(_webDavPasswordInput),
-            S3Endpoint = s.S3Endpoint,
-            S3Bucket = s.S3Bucket,
-            S3BasePrefix = s.S3BasePrefix,
-            S3AccessKey = s.S3AccessKey,
+            S3Endpoint = _syncS3EndpointDraft,
+            S3Bucket = _syncS3BucketDraft,
+            S3BasePrefix = _syncS3BasePrefixDraft,
+            S3AccessKey = _syncS3AccessKeyDraft,
             S3SecretKey = _s3SecretKeyInput.Length == 0 ? s.S3SecretKey : CredentialProtector.Protect(_s3SecretKeyInput)
         };
+    }
+
+    /// <summary>由窗口 code-behind 在 PasswordChanged 时推送（只更新草稿，不落盘）</summary>
+    public void SetWebDavPasswordInput(string password)
+    {
+        _webDavPasswordInput = password ?? string.Empty;
+        OnPropertyChanged(nameof(SyncWebDavCredentialHint));
+        if (_webDavPasswordInput.Length == 0) return; // 清空输入框不代表清除已存凭据
+
+        NotifyDraftChanged();
+    }
+
+    /// <summary>由窗口 code-behind 在 PasswordChanged 时推送（只更新草稿，不落盘）</summary>
+    public void SetS3SecretKeyInput(string secretKey)
+    {
+        _s3SecretKeyInput = secretKey ?? string.Empty;
+        OnPropertyChanged(nameof(SyncS3CredentialHint));
+        if (_s3SecretKeyInput.Length == 0) return;
+
+        NotifyDraftChanged();
+    }
+
+    private bool CanSaveSyncSettings() => HasUnsavedChanges && !IsSyncBusy;
+
+    /// <summary>凭据已写入配置文件：窗口据此清空密码框，避免明文继续留在界面</summary>
+    public event Action? CredentialsCommitted;
+
+    /// <summary>把草稿写回已保存配置并落盘（唯一入口：测试连接不会触发保存）</summary>
+    [RelayCommand(CanExecute = nameof(CanSaveSyncSettings))]
+    private void SaveSyncSettings()
+    {
+        var s = Sync;
+        var draft = BuildDraftSyncSettings();
+
+        s.Enabled = draft.Enabled;
+        s.BackendType = draft.BackendType;
+        s.IntervalMinutes = draft.IntervalMinutes;
+        s.WebDavUrl = draft.WebDavUrl;
+        s.WebDavUsername = draft.WebDavUsername;
+        s.WebDavAllowInsecureHttp = draft.WebDavAllowInsecureHttp;
+        s.WebDavPassword = draft.WebDavPassword;
+        s.S3Endpoint = draft.S3Endpoint;
+        s.S3Bucket = draft.S3Bucket;
+        s.S3BasePrefix = draft.S3BasePrefix;
+        s.S3AccessKey = draft.S3AccessKey;
+        s.S3SecretKey = draft.S3SecretKey;
+
+        // 凭据明文不回填输入框，避免密码在内存/界面里残留（窗口同步清空 PasswordBox）
+        _webDavPasswordInput = string.Empty;
+        _s3SecretKeyInput = string.Empty;
+
+        _settingsService.SaveSettings();
+        _syncHost?.ApplySettingsChanged();
+
+        HasUnsavedChanges = false;
+        SaveHintText = $"已保存（{DateTime.Now:HH:mm:ss}）";
+        CredentialsCommitted?.Invoke();
+        OnPropertyChanged(nameof(SyncWebDavCredentialHint));
+        OnPropertyChanged(nameof(SyncS3CredentialHint));
+
+        RefreshSyncStatus();
+        AppLog.Info($"[SyncSettings] 同步配置已保存（后端={s.BackendType}, 间隔={s.IntervalMinutes}, 启用={s.Enabled}）");
     }
 
     [RelayCommand]
@@ -218,8 +360,11 @@ public partial class SyncSettingsViewModel : ObservableObject
         IsSyncBusy = true;
         try
         {
-            await StorageBackendFactory.TestConnectionAsync(BuildEffectiveSyncSettings());
-            MessageBox.Show("连接成功，凭据有效。", "测试连接", MessageBoxButton.OK, MessageBoxImage.Information);
+            // 仅用草稿探测连通性，不写回已保存配置
+            await StorageBackendFactory.TestConnectionAsync(BuildDraftSyncSettings());
+            MessageBox.Show(
+                "连接成功，凭据有效。\n如需让本次修改正式生效，请点「保存」。",
+                "测试连接", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
@@ -237,6 +382,14 @@ public partial class SyncSettingsViewModel : ObservableObject
         if (IsSyncBusy) return;
         if (_syncHost == null) return;
 
+        if (HasUnsavedChanges)
+        {
+            MessageBox.Show(
+                "当前有未保存的同步配置修改，立即同步只会使用已保存的配置。\n请先点「保存」再同步。",
+                "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         IsSyncBusy = true;
         try
         {
@@ -249,13 +402,24 @@ public partial class SyncSettingsViewModel : ObservableObject
             }
             else if (!Sync.Enabled || !Sync.IsConfigured)
             {
-                MessageBox.Show("请先启用同步并配置服务器信息。", "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("请先启用同步并保存服务器信息。", "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         finally
         {
             IsSyncBusy = false;
         }
+    }
+
+    /// <summary>窗口关闭时由 code-behind 询问：是否放弃未保存的修改</summary>
+    public bool ConfirmDiscardDraft()
+    {
+        if (!HasUnsavedChanges) return true;
+
+        var answer = MessageBox.Show(
+            "同步配置有未保存的修改，关闭将丢弃这些修改（不会影响已保存的配置）。\n确定要关闭吗？",
+            "同步设置", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        return answer == MessageBoxResult.OK;
     }
 
     private void RefreshSyncStatusOnDispatcher()
@@ -274,7 +438,9 @@ public partial class SyncSettingsViewModel : ObservableObject
     {
         if (!Sync.Enabled)
         {
-            SyncStatusText = "同步未启用";
+            SyncStatusText = HasUnsavedChanges
+                ? "同步未启用（有未保存修改）"
+                : "同步未启用";
             return;
         }
 
