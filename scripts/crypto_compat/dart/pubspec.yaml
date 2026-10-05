@@ -1,0 +1,9 @@
+name: crypto_compat_dart
+description: Dart cross-platform crypto compatibility test
+publish_to: 'none'
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  crypto: ^3.0.3
+  encrypt: ^5.0.3

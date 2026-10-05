@@ -1,0 +1,65 @@
+{
+  "description": "StickyNotes 便签跨平台加解密测试向量（含 NIST KAT 与防偷窥应用方案测试）",
+  "nist_kat": [
+    {
+      "name": "temp/KAT_AES/CBCVarTxt256 Count=0",
+      "key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "iv_hex": "00000000000000000000000000000000",
+      "plaintext_hex": "80000000000000000000000000000000",
+      "ciphertext_hex": "ddc6bf790c15760d8d9aeb6f9a75fd4e"
+    },
+    {
+      "name": "temp/KAT_AES/CBCVarKey256 Count=0",
+      "key_hex": "8000000000000000000000000000000000000000000000000000000000000000",
+      "iv_hex": "00000000000000000000000000000000",
+      "plaintext_hex": "00000000000000000000000000000000",
+      "ciphertext_hex": "e35a6dcb19b201a01ebcfa8aa22b5759"
+    },
+    {
+      "name": "NIST SP 800-38A F.2.5 Block 1",
+      "key_hex": "603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4",
+      "iv_hex": "000102030405060708090a0b0c0d0e0f",
+      "plaintext_hex": "6bc1bee22e409f96e93d7e117393172a",
+      "ciphertext_hex": "f58c4c04d6e5f1ba779eabfb5f7bfbd6"
+    }
+  ],
+  "app_scheme": {
+    "algorithm": "AES-256-CBC",
+    "padding": "PKCS7 (PKCS5Padding)",
+    "key_derivation": "SHA-256(UTF8(password))",
+    "cases": [
+      {
+        "id": "case_mixed",
+        "description": "中英文特殊符号 Emoji 换行混杂测试",
+        "password": "StickyNotes#2026!Pass",
+        "iv_base64": "AAECAwQFBgcICQoLDA0ODw==",
+        "plaintext": "【便签】StickyNotes 2.0 端到端防偷窥加密测试！\nEnglish: The quick brown fox jumps over the lazy dog. 0123456789.\nSymbols: ~!@#$%^&*()_+`-={}|[]\\:\";'<>?,./\nEmoji: 📝🚀🎉🔐💡\nMulti-line & Whitespace:\r\n\tTab缩进与换行测试\n末尾空格测试   ",
+        "expected_ciphertext_base64": "g//VhNu/q6PQKaIx9jySzQqtwz3unRPg7C+7qU9+5nMXslInpukYYk71cE0WAVb3ZmE1wAXnxAmCZl2foR3fkF1P/6wa7IDOxLJloBgM809HET0Zy7peRNDZ1+kX9qtQQzKcz52ALTFl1UHh71lQqd4eCRvrH3xaF5Uaqs+Tm0e7tbNWaXyTEkFUrb/nzmKL8QRsp+9e6Vn5UjbFFTmi+82tIL6gkHTbe4FK9U0YEcyJFFZPJNflcqM1p5W+4a5+kbBju7/u3SGSpQ/QncIHdvg19fE2FoQsFQ33QdGxubz9VGxVC6U555ajBwsLI3Wyq5oRIlNYSG06YEyMftCeI2sOdyjxlR24J4JvDwfB3/c="
+      },
+      {
+        "id": "case_empty",
+        "description": "空字符串边界测试（PKCS7 生成单个 16 字节填充块）",
+        "password": "StickyNotes#2026!Pass",
+        "iv_base64": "AAECAwQFBgcICQoLDA0ODw==",
+        "plaintext": "",
+        "expected_ciphertext_base64": "UWGjlDGoSmmsP10QLuuHCQ=="
+      },
+      {
+        "id": "case_exact_16",
+        "description": "恰好 16 字节整块测试（PKCS7 追加完整 16 字节填充块）",
+        "password": "StickyNotes#2026!Pass",
+        "iv_base64": "AAECAwQFBgcICQoLDA0ODw==",
+        "plaintext": "1234567890abcdef",
+        "expected_ciphertext_base64": "Blv+0htlqNqh2VJrIhRHAjfyS1DgntjbK1Kc7PMsaI8="
+      },
+      {
+        "id": "case_single_char",
+        "description": "单字符测试（1 字节 + 15 字节填充）",
+        "password": "StickyNotes#2026!Pass",
+        "iv_base64": "AAECAwQFBgcICQoLDA0ODw==",
+        "plaintext": "A",
+        "expected_ciphertext_base64": "2MXw341YeaLeSUJoW4L7ww=="
+      }
+    ]
+  }
+}
