@@ -4,7 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:models="clr-namespace:StickyNotes.Models"
                  xmlns:controls="clr-namespace:StickyNotes.Views.Controls"
-                 Title="便签"
+                 Title="彩色便签"
                  Icon="pack://application:,,,/StickyNotes;component/Assets/AppIcon.ico"
                  Width="480" Height="720"
                  MinWidth="380" MinHeight="520"
@@ -574,6 +574,14 @@
                     </Grid>
             </Grid>
         </Grid>
+        <!-- 非打断式轻提示条：替代此前同步结果一律弹 MessageBox 的做法。
+         放在 PIN 遮罩之前，使提示在锁定态下依然可见；IsOpen 默认关闭，不占布局。 -->
+        <ui:InfoBar x:Name="SyncInfoBar"
+                    Grid.Row="1"
+                    Margin="16,0,16,12"
+                    VerticalAlignment="Bottom"
+                    IsClosable="True"
+                    IsOpen="False" />
         <!-- 1. PIN 锁定遮罩：盖住内容区（保留标题栏可拖动/关闭），锁定时完全遮挡便签内容 -->
         <controls:PinLockOverlay x:Name="PinOverlay"
                                  Grid.Row="1" />

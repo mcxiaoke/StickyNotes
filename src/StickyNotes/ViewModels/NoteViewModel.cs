@@ -57,6 +57,24 @@ public partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     private double _fontSize = 14.0;
 
+    private string _windowTitle = string.Empty;
+    /// <summary>
+    /// 便签窗口标题（供 <c>NoteWindow.Title</c> 绑定，任务栏/Alt+Tab 据此区分多张便签）。
+    /// </summary>
+    /// <remarks>
+    /// 生产契约（有意为之，勿改）：<b>不做实时绑定</b>。正文是
+    /// <c>UpdateSourceTrigger=PropertyChanged</c>，若直接绑定 <c>Note.DisplayTitle</c>，
+    /// 每敲一个字都会触发一次 <c>WM_SETTEXT</c> 与任务栏按钮重绘，长文本输入会明显卡顿。
+    /// 因此标题只由 <see cref="RefreshWindowTitle"/> 按需刷新：窗口打开时立即计算一次，
+    /// 之后由 <c>NoteWindow</c> 的低频计时器驱动，且内部做了「有变化才通知」短路，
+    /// 未变动时零 PropertyChanged 事件。
+    /// </remarks>
+    public string WindowTitle
+    {
+        get => _windowTitle;
+        private set => SetProperty(ref _windowTitle, value);
+    }
+
     private NoteSaveState _saveState = NoteSaveState.Saved;
     /// <summary>
     /// 当前便签的真实持久化状态
@@ -157,6 +175,24 @@ public partial class NoteViewModel : ObservableObject
         // 初始即为「已同步」：打开时的内存内容与数据库一致
         SaveState = NoteSaveState.Saved;
         LastSavedAt = null;
+
+        // 窗口打开时立即算一次标题，之后交给低频计时器增量刷新
+        RefreshWindowTitle();
+    }
+
+    /// <summary>
+    /// 重新计算窗口标题，仅在结果真正变化时才发出 <c>PropertyChanged</c>。
+    /// 由 <c>NoteWindow</c> 的低频计时器调用，避免正文每次按键都重绘任务栏按钮。
+    /// </summary>
+    public void RefreshWindowTitle()
+    {
+        var newTitle = Note.DisplayTitle;
+        if (string.Equals(newTitle, _windowTitle, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        WindowTitle = newTitle;
     }
 
     private bool _isInitializing;

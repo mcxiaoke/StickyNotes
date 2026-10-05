@@ -233,6 +233,48 @@ public class FeaturesAndPerformanceTests
     }
 
     /// <summary>
+    /// 验证便签窗口标题刷新契约（任务栏/Alt+Tab 靠它区分多张便签）：
+    /// 打开即算一次、内容变化后刷新、且未变化时零 PropertyChanged 事件。
+    /// </summary>
+    [TestMethod]
+    public void P2_NoteViewModel_WindowTitle_RefreshesOnChangeOnly()
+    {
+        var settingsService = new SettingsService(_settingsPath);
+        var repo = new FakeNoteRepository();
+        var autoSave = new AutoSaveCoordinator(repo);
+        var vm = new NoteViewModel(repo, autoSave, settingsService);
+
+        var note = new Note { Content = "买牛奶" };
+        vm.Initialize(note);
+
+        // 打开即算一次，无需等待任何计时器
+        Assert.AreEqual("买牛奶", vm.WindowTitle);
+
+        // 统计 PropertyChanged 次数：内容变动后刷新一次，未变动时不得重复通知
+        int titleChangedCount = 0;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(NoteViewModel.WindowTitle)) titleChangedCount++;
+        };
+
+        // 内容变了 → 刷新应产生通知
+        vm.Content = "买牛奶和面包";
+        vm.RefreshWindowTitle();
+        Assert.AreEqual("买牛奶和面包", vm.WindowTitle);
+        Assert.AreEqual(1, titleChangedCount, "标题真实变化时必须通知一次");
+
+        // 内容没再变 → 短路，不得产生任何通知
+        vm.RefreshWindowTitle();
+        vm.RefreshWindowTitle();
+        Assert.AreEqual(1, titleChangedCount, "标题无变化时必须短路，零通知");
+
+        // 空白便签走占位文案
+        vm.Content = "   ";
+        vm.RefreshWindowTitle();
+        Assert.AreEqual("（空白便签）", vm.WindowTitle);
+    }
+
+    /// <summary>
     /// 验证开机自启动服务 AutoStartService 读取状态安全无异常
     /// </summary>
     [TestMethod]

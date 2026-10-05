@@ -55,7 +55,7 @@ public sealed class TrayIconService : IDisposable
         // 会被幂等地执行多次；再绑 DoubleClickCommand 只会让同一次双击触发三遍激活（N-5）。
         _taskbarIcon = new TaskbarIcon
         {
-            ToolTipText = "StickyNotes 便签",
+            ToolTipText = "彩色便签",
             MenuActivation = PopupActivationMode.RightClick,
             LeftClickCommand = new RelayCommand(OpenOrActivateListWindow)
         };
@@ -190,23 +190,22 @@ public sealed class TrayIconService : IDisposable
     {
         var contextMenu = new ContextMenu();
 
-        var itemNew = new MenuItem { Header = "新建便签 (Ctrl+N)" };
+        // 菜单仅保留四个常用动作，文案求短，功能与行为保持原样不变。
+        var itemNew = new MenuItem { Header = "新建" };
         itemNew.Click += (_, _) => WeakReferenceMessenger.Default.Send(new NewNoteRequestedMessage());
         contextMenu.Items.Add(itemNew);
 
-        var itemList = new MenuItem { Header = "便签列表 (Ctrl+H)" };
+        var itemList = new MenuItem { Header = "打开" };
         itemList.Click += (_, _) => WeakReferenceMessenger.Default.Send(new ShowNotesListRequestedMessage());
         contextMenu.Items.Add(itemList);
 
-        contextMenu.Items.Add(new Separator());
-
-        var itemSettings = new MenuItem { Header = "设置中心" };
+        var itemSettings = new MenuItem { Header = "设置" };
         itemSettings.Click += (_, _) => _windowManager.OpenOrActivateSettingsWindow();
         contextMenu.Items.Add(itemSettings);
 
         contextMenu.Items.Add(new Separator());
 
-        var itemExit = new MenuItem { Header = "退出便签" };
+        var itemExit = new MenuItem { Header = "退出" };
         itemExit.Click += (_, _) =>
         {
             AppLog.Info("[TrayIconService] 用户点击托盘退出菜单");

@@ -10,6 +10,10 @@ using StickyNotes.Messages;
 using StickyNotes.Models;
 using StickyNotes.Services;
 using StickyNotes.ViewModels;
+// 刻意只按类型别名引入 Wpf.Ui 的这两个类型，而不写 `using Wpf.Ui.Controls;`：
+// 两个命名空间都定义了 MenuItem，整条 using 会让本文件里既有的 MenuItem 判定
+//（卡片右键菜单等）变成二义引用而编译失败。
+using InfoBarSeverity = Wpf.Ui.Controls.InfoBarSeverity;
 
 namespace StickyNotes.Views;
 
@@ -25,6 +29,9 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 
     /// <summary>闲时自动关闭计时器：窗口持续不在前台达到设定分钟数后自动收起</summary>
     private readonly DispatcherTimer _idleCloseTimer = new() { Interval = TimeSpan.FromMinutes(10) };
+
+    /// <summary>同步结果轻提示条的自动收起计时器（仅成功/信息态启用，见 <see cref="ShowInfoBar"/>）</summary>
+    private readonly DispatcherTimer _infoBarCloseTimer = new();
 
     public NotesListViewModel ViewModel => (NotesListViewModel)DataContext;
 
@@ -77,6 +84,17 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             {
                 AppLog.Info("[NotesListWindow] 列表窗口长时间不在前台，自动收起到托盘");
                 Close();
+            }
+        };
+
+        // 同步结果提示条自动收起：到点收起，等待期间用户可随时手动关掉
+        _infoBarCloseTimer.Interval = InfoBarAutoCloseDelay;
+        _infoBarCloseTimer.Tick += (_, _) =>
+        {
+            _infoBarCloseTimer.Stop();
+            if (SyncInfoBar != null)
+            {
+                SyncInfoBar.IsOpen = false;
             }
         };
 
@@ -260,6 +278,11 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     /// 手动「立即同步」（协议设计 §6 触发时机 5）：走<see cref="SyncHost.SyncNowAsync"/>统一入口，
     /// 单飞由引擎兜底；同步期间按钮置忙，完成后刷新列表（下行应用由 SyncHost 广播重载消息）。
     /// </summary>
+    /// <remarks>
+    /// 结果一律走<see cref="ShowInfoBar"/>非打断提示，不再弹 MessageBox：
+    /// 同步是可随时重复触发的后台动作，弹窗打断输入且必须逐个点掉，属设计缺陷。
+    /// 前置校验失败（未初始化/未启用/未配置）同样只提示不弹窗，理由同上。
+    /// </remarks>
     private async void SyncNowButton_Click(object sender, RoutedEventArgs e)
     {
         // 重入保护：本窗口内同步未结束前不重复发起（引擎单飞仅拦引擎侧，这里先给出可见反馈）
@@ -267,21 +290,20 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
 
         if (_syncHost == null)
         {
-            MessageBox.Show("同步功能尚未初始化。", "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowInfoBar("同步功能尚未初始化", InfoBarSeverity.Warning);
             return;
         }
 
         var sync = _settingsService?.Settings.Sync;
         if (sync == null || !sync.Enabled)
         {
-            MessageBox.Show("请先在「设置 → 网络同步」中启用同步。", "立即同步", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowInfoBar("请先在「设置 → 网络同步」中启用同步", InfoBarSeverity.Informational);
             return;
         }
 
         if (!sync.IsConfigured)
         {
-            MessageBox.Show("同步服务器信息尚未填写完整，请先在「设置 → 网络同步」中配置并保存。",
-                "立即同步", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowInfoBar("同步服务器信息尚未填写完整，请先在「设置 → 网络同步」中配置并保存", InfoBarSeverity.Informational);
             return;
         }
 
@@ -294,27 +316,52 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             {
                 // null 有三种来源：引擎单飞放弃、后端构建失败、或本轮已被异常吞掉并记入 LastError
                 var error = _syncHost.CurrentState.LastError;
-                MessageBox.Show(
+                ShowInfoBar(
                     string.IsNullOrEmpty(error)
-                        ? "本次同步未执行（上一轮同步尚未结束）。"
+                        ? "本次同步未执行（上一轮同步尚未结束）"
                         : $"同步失败：{error}",
-                    "立即同步", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    InfoBarSeverity.Warning);
                 return;
             }
 
-            MessageBox.Show(
-                $"同步完成。\n远端对象：{summary.Listed}\n下行应用：{summary.Downloaded}（守卫跳过 {summary.GuardedSkipped}）\n上传：{summary.Uploaded}",
-                "立即同步", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowInfoBar(
+                $"同步完成 · 下行 {summary.Downloaded} · 上传 {summary.Uploaded} · 守卫跳过 {summary.GuardedSkipped}",
+                InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {
             AppLog.Error($"[NotesListWindow] 手动同步异常: {ex.Message}", ex);
-            MessageBox.Show($"同步失败：{ex.Message}", "立即同步", MessageBoxButton.OK, MessageBoxImage.Error);
+            ShowInfoBar($"同步失败：{ex.Message}", InfoBarSeverity.Error);
         }
         finally
         {
             _isManualSyncing = false;
             SetSyncNowBusy(false);
+        }
+    }
+
+    /// <summary>
+    /// 自动收起轻提示条的延时。仅成功态用短延时自动消失；
+    /// 警告与错误保留在界面上直到用户手动关闭或被下一次提示覆盖，避免漏看失败原因。
+    /// </summary>
+    private static readonly TimeSpan InfoBarAutoCloseDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// 统一展示非打断式轻提示条（成功/信息/警告/错误四态）。
+    /// </summary>
+    private void ShowInfoBar(string message, InfoBarSeverity severity)
+    {
+        if (SyncInfoBar == null) return;
+
+        SyncInfoBar.Message = message;
+        SyncInfoBar.Severity = severity;
+        SyncInfoBar.IsOpen = true;
+
+        // 重入：连点同步时，上一次的自动收起计时必须作废，否则会把新提示提前关掉
+        _infoBarCloseTimer.Stop();
+        if (severity == InfoBarSeverity.Success || severity == InfoBarSeverity.Informational)
+        {
+            _infoBarCloseTimer.Start();
         }
     }
 

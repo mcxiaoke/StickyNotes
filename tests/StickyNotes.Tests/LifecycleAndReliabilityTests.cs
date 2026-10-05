@@ -768,9 +768,19 @@ public class LifecycleAndReliabilityTests
             trayService.Initialize();
             var icon = trayService.TaskbarIconForTest;
             Assert.IsNotNull(icon, "初始化后 TaskbarIcon 实例不得为空");
-            Assert.AreEqual("StickyNotes 便签", icon.ToolTipText);
+            Assert.AreEqual("彩色便签", icon.ToolTipText);
             Assert.IsNotNull(icon.ContextMenu, "托盘右键上下文菜单必须已挂载");
             Assert.IsTrue(icon.ContextMenu.Items.Count >= 5, "托盘菜单项必须包含新建、列表、设置、退出等基本项");
+
+            // 菜单文案契约：四项固定为 新建 / 打开 / 设置 / 退出（不含快捷键后缀）
+            var headers = icon.ContextMenu.Items
+                .OfType<System.Windows.Controls.MenuItem>()
+                .Select(m => m.Header as string)
+                .ToList();
+            CollectionAssert.AreEqual(
+                new[] { "新建", "打开", "设置", "退出" },
+                headers,
+                "托盘菜单必须恰好是 新建/打开/设置/退出 四项，顺序固定");
 
             trayService.Dispose();
             Assert.IsNull(trayService.TaskbarIconForTest, "Dispose 后 TaskbarIcon 必须被置空并释放");

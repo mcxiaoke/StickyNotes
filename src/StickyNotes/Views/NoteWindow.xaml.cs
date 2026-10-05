@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -15,6 +16,15 @@ namespace StickyNotes.Views;
 /// </summary>
 public partial class NoteWindow : Window
 {
+    /// <summary>
+    /// 窗口标题低频刷新间隔。
+    /// 取3 秒是权衡结果：任务栏/Alt+Tab 的标题滞后 3 秒完全无感，
+    /// 而刷新频率越高，触发 <c>WM_SETTEXT</c> 与任务栏按钮重绘的次数越多。
+    /// </summary>
+    private static readonly TimeSpan TitleRefreshInterval = TimeSpan.FromSeconds(3);
+
+    private readonly DispatcherTimer _titleRefreshTimer;
+
     public NoteViewModel ViewModel => (NoteViewModel)DataContext;
     public TextBox Editor => EditorTextBox;
     public System.Windows.Controls.Primitives.Popup MoreMenu => MoreMenuPopup;
@@ -24,6 +34,18 @@ public partial class NoteWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+
+        // 标题低频刷新：多张便签在任务栏里靠各自的首行摘要区分。
+        // 计时器在窗口关闭时必须停掉，否则已关闭窗口的 ViewModel 会被 Dispatcher 一直持有，
+        // 形成内存泄漏（每个 DispatcherTimer 都持有对窗口的强引用）。
+        _titleRefreshTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TitleRefreshInterval
+        };
+        _titleRefreshTimer.Tick += (_, _) => ViewModel.RefreshWindowTitle();
+        _titleRefreshTimer.Start();
+
+        Closed += (_, _) => _titleRefreshTimer.Stop();
 
         // 实时同步尺寸与坐标至实体，保证持久化绝对准确
         SizeChanged += (_, _) =>
@@ -50,6 +72,10 @@ public partial class NoteWindow : Window
             // 无待保存改动时短路，避免「在便签与列表间来回切换 = 每切一次一条全量 UPDATE」（原 F-P2-10）
             if (!ViewModel.HasPendingChanges) return;
             await ViewModel.FlushSaveAsync();
+
+            // 失焦是标题刷新的最佳时机：此刻正文已落库，任务栏标题立即可读，
+            // 不必等下一个 3 秒周期。
+            ViewModel.RefreshWindowTitle();
         };
 
         // 关闭必须是同步阻塞刷盘：此前的 async void 写法中，await 之后的续体在
