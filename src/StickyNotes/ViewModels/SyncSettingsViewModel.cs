@@ -244,8 +244,8 @@ public partial class SyncSettingsViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SaveSyncSettingsCommand))]
     private bool _hasUnsavedChanges;
 
-    private string _saveHintText = "配置修改后需点「保存」才会写入配置文件";
-    /// <summary>保存提示行（未保存时提醒，保存后回显已保存时刻）</summary>
+    private string _saveHintText = "配置修改后需点「保存」才会写入配置文件并触发同步";
+    /// <summary>保存提示行（未保存时提醒，保存后回显已保存时刻与同步触发）</summary>
     public string SaveHintText
     {
         get => _saveHintText;
@@ -280,7 +280,7 @@ public partial class SyncSettingsViewModel : ObservableObject
         if (_suppressDraftDirty) return;
 
         HasUnsavedChanges = true;
-        SaveHintText = "有未保存的修改，点「保存」后才会生效";
+        SaveHintText = "⚠️ 配置已修改，点「保存」后将立即生效并触发同步";
     }
 
     /// <summary>用草稿构造一份 SyncSettings（测试连接 / 校验用，不写回已保存配置）</summary>
@@ -360,7 +360,9 @@ public partial class SyncSettingsViewModel : ObservableObject
         _syncHost?.ApplySettingsChanged();
 
         HasUnsavedChanges = false;
-        SaveHintText = $"已保存（{DateTime.Now:HH:mm:ss}）";
+        SaveHintText = s.Enabled && s.IsConfigured
+            ? $"已保存（{DateTime.Now:HH:mm:ss}），正在触发同步…"
+            : $"已保存（{DateTime.Now:HH:mm:ss}）";
         CredentialsCommitted?.Invoke();
         OnPropertyChanged(nameof(SyncWebDavCredentialHint));
         OnPropertyChanged(nameof(SyncS3CredentialHint));
@@ -467,16 +469,22 @@ public partial class SyncSettingsViewModel : ObservableObject
         }
 
         var state = _syncHost.CurrentState;
+        var countsSummary = state.LastUploadedCount.HasValue || state.LastDownloadedCount.HasValue
+            ? $"（上传 {state.LastUploadedCount ?? 0}，下载 {state.LastDownloadedCount ?? 0}）"
+            : string.Empty;
+
         if (state.LastError != null)
         {
             var attempt = state.LastAttemptAt?.ToLocalTime().ToString("HH:mm:ss") ?? "--";
-            var lastOk = state.LastSuccessAt?.ToLocalTime().ToString("MM-dd HH:mm") ?? "从未成功";
+            var lastOk = state.LastSuccessAt != null
+                ? state.LastSuccessAt.Value.ToLocalTime().ToString("MM-dd HH:mm") + countsSummary
+                : "从未成功";
             var error = state.LastError.Length > 80 ? state.LastError[..80] + "…" : state.LastError;
             SyncStatusText = $"上次同步失败（{attempt}）：{error}；最近成功：{lastOk}";
         }
         else if (state.LastSuccessAt != null)
         {
-            SyncStatusText = $"最近同步：{state.LastSuccessAt.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+            SyncStatusText = $"最近同步：{state.LastSuccessAt.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss}{countsSummary}";
         }
         else
         {

@@ -49,7 +49,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="启用网络同步" Style="{StaticResource Type.SettingTitle}" />
-                                <TextBlock Text="通过 WebDAV 或 Cloudflare R2 在多台设备间同步便签；同一便签按最新修改时间自动合并"
+                                <TextBlock Text="通过 WebDAV 或 Cloudflare R2 在多台设备间同步便签；同一便签按最新修改时间自动合并（修改后需点下方「保存」生效）"
                                            Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"
@@ -179,7 +179,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock Text="启用远端数据加密" Style="{StaticResource Type.SettingTitle}" />
-                                <TextBlock Text="便签正文经 AES-256 加密存入远端，服务商无法查看内容。"
+                                <TextBlock Text="便签正文经 AES-256 加密存入远端，服务商无法查看内容。（修改后需点下方「保存」生效并同步）"
                                            Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
                             </StackPanel>
                             <ui:ToggleSwitch Grid.Column="1"

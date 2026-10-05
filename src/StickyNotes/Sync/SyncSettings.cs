@@ -85,4 +85,13 @@ public sealed class SyncState
 
     /// <summary>最近一次尝试（含失败）时间，用于设置页展示「正在重试」语义</summary>
     public DateTime? LastAttemptAt { get; set; }
+
+    /// <summary>最近一次成功同步的上传便签数</summary>
+    public int? LastUploadedCount { get; set; }
+
+    /// <summary>最近一次成功同步的下行下载应用便签数</summary>
+    public int? LastDownloadedCount { get; set; }
+
+    /// <summary>最近一次成功同步的远端对象总数</summary>
+    public int? LastListedCount { get; set; }
 }

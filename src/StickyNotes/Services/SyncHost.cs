@@ -86,12 +86,29 @@ public sealed class SyncHost : IDisposable
         });
     }
 
-    /// <summary>设置变更（保存后）调用：重建定时器；后端实例按配置指纹在下一轮自动重建</summary>
+    /// <summary>设置变更（保存后）调用：重建定时器并在启用时自动发起同步；后端实例按配置指纹在下一轮自动重建</summary>
     public void ApplySettingsChanged()
     {
         if (!_started) return;
         ResetTimer();
         AppLog.Info("[SyncHost] 同步设置已变更，定时器与后端配置已刷新");
+
+        var settings = _settingsService.Settings.Sync;
+        if (settings.Enabled && settings.IsConfigured)
+        {
+            AppLog.Info("[SyncHost] 设置变更已保存且同步已启用，正在触发自动同步 (settings_saved)");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SyncNowAsync("settings_saved").ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error($"[SyncHost] 保存配置后自动同步异常: {ex.Message}", ex);
+                }
+            });
+        }
     }
 
     /// <summary>立即执行一轮同步（手动按钮 / 各触发器统一入口）</summary>
@@ -109,6 +126,8 @@ public sealed class SyncHost : IDisposable
             return null;
         }
 
+        AppLog.Info($"[SyncHost] 开始执行同步 (reason={reason}, backend={settings.BackendType}, encryption={settings.EnableEncryption})");
+
         try
         {
             var summary = await _engine.RunAsync(backend, GetDeviceId(), settings.EnableEncryption).ConfigureAwait(false);
@@ -120,6 +139,9 @@ public sealed class SyncHost : IDisposable
                     s.LastSuccessAt = DateTime.UtcNow;
                     s.LastError = null;
                     s.LastAttemptAt = DateTime.UtcNow;
+                    s.LastUploadedCount = summary.Uploaded;
+                    s.LastDownloadedCount = summary.Downloaded;
+                    s.LastListedCount = summary.Listed;
                 });
                 AppLog.Info($"[SyncHost] 同步完成({reason}): listed={summary.Listed}, downloaded={summary.Downloaded}, " +
                             $"uploaded={summary.Uploaded}, skipped={summary.SkippedInvalid}, guarded={summary.GuardedSkipped}");

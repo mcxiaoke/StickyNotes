@@ -357,19 +357,31 @@ public partial class SettingsViewModel : ObservableObject
             return;
         }
 
+        if (!_settingsService.Settings.Sync.Enabled)
+        {
+            SyncStatusText = "同步未启用";
+            return;
+        }
+
         var state = _syncHost.CurrentState;
+        var countsSummary = state.LastUploadedCount.HasValue || state.LastDownloadedCount.HasValue
+            ? $"（上传 {state.LastUploadedCount ?? 0}，下载 {state.LastDownloadedCount ?? 0}）"
+            : string.Empty;
+
         if (!string.IsNullOrEmpty(state.LastError))
         {
-            var lastOk = state.LastSuccessAt?.ToLocalTime().ToString("MM-dd HH:mm") ?? "从未成功";
+            var lastOk = state.LastSuccessAt != null
+                ? state.LastSuccessAt.Value.ToLocalTime().ToString("MM-dd HH:mm") + countsSummary
+                : "从未成功";
             SyncStatusText = $"同步异常，最近成功：{lastOk}（详见同步设置）";
         }
         else if (state.LastSuccessAt != null)
         {
-            SyncStatusText = $"最近同步：{state.LastSuccessAt.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss}";
+            SyncStatusText = $"最近同步：{state.LastSuccessAt.Value.ToLocalTime():yyyy-MM-dd HH:mm:ss}{countsSummary}";
         }
         else
         {
-            SyncStatusText = "尚未同步";
+            SyncStatusText = "已启用，尚未同步";
         }
     }
 }

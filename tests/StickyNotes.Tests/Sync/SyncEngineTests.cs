@@ -467,4 +467,35 @@ public class SyncEngineTests
         Assert.AreEqual(2, aAll.Count);
         CollectionAssert.AreEqual(aAll.Select(n => (n.Id, n.Content)).ToList(), bAll.Select(n => (n.Id, n.Content)).ToList());
     }
+
+    [TestMethod]
+    public void SyncStateStore_SavesAndLoads_UploadedAndDownloadedCounts()
+    {
+        var tempFile = Path.Combine(TestEnvironment.TempRoot, $"sync-state-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new SyncStateStore(tempFile);
+            var initial = store.Load();
+            Assert.IsNull(initial.LastUploadedCount);
+            Assert.IsNull(initial.LastDownloadedCount);
+
+            store.Update(s =>
+            {
+                s.LastSuccessAt = DateTime.UtcNow;
+                s.LastUploadedCount = 5;
+                s.LastDownloadedCount = 2;
+                s.LastListedCount = 10;
+            });
+
+            var reloaded = store.Load();
+            Assert.IsNotNull(reloaded.LastSuccessAt);
+            Assert.AreEqual(5, reloaded.LastUploadedCount);
+            Assert.AreEqual(2, reloaded.LastDownloadedCount);
+            Assert.AreEqual(10, reloaded.LastListedCount);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
 }

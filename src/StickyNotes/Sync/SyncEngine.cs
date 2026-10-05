@@ -67,10 +67,15 @@ public sealed class SyncEngine
             {
                 throw new InvalidOperationException("远端加密保险箱口令校验失败（.auth_verifier 无法解密或密钥不匹配），同步已安全中止。");
             }
+            else
+            {
+                AppLog.Info("[SyncEngine] 远端加密保险箱校验探针（.auth_verifier）验证通过");
+            }
         }
 
         // 1. 列出远端并全量下载解析（坏文件隔离，绝不中断整轮）
         var remoteItems = await backend.ListAsync(ct).ConfigureAwait(false);
+        AppLog.Info($"[SyncEngine] 远端列表拉取完成，共 {remoteItems.Count} 个远端对象");
         var remote = new ConcurrentDictionary<Guid, SyncNoteDto>();
         int skippedInvalid = 0;
         int failedDownloads = 0;
@@ -186,11 +191,14 @@ public sealed class SyncEngine
             }
         }
 
+        AppLog.Info($"[SyncEngine] 全量对账完成: 本地便签={snapshot.Count}, 远端便签={remote.Count} => 待下行下载={downloads.Count}, 待上行上传={uploads.Count}");
+
         // 3. 下行应用（条件更新守卫，见 NoteRepository.ApplyRemoteBatchAsync）
         int applied = 0;
         int guardedSkipped = 0;
         if (downloads.Count > 0)
         {
+            AppLog.Info($"[SyncEngine] 开始下行应用 {downloads.Count} 条便签...");
             var applyResult = await _repository.ApplyRemoteBatchAsync(downloads, ct).ConfigureAwait(false);
             applied = applyResult.Applied;
             guardedSkipped = applyResult.GuardedSkipped;
@@ -202,6 +210,10 @@ public sealed class SyncEngine
 
         // 4. 上行（失败即整轮终止；已上传文件有效，下轮按差量续传）
         int uploaded = 0;
+        if (uploads.Count > 0)
+        {
+            AppLog.Info($"[SyncEngine] 开始上行上传 {uploads.Count} 条便签（加密={enableEncryption}）...");
+        }
         foreach (var note in uploads)
         {
             var dto = enableEncryption
