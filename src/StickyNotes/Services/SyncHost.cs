@@ -111,7 +111,7 @@ public sealed class SyncHost : IDisposable
 
         try
         {
-            var summary = await _engine.RunAsync(backend, GetDeviceId()).ConfigureAwait(false);
+            var summary = await _engine.RunAsync(backend, GetDeviceId(), settings.EnableEncryption).ConfigureAwait(false);
 
             if (summary != null)
             {
@@ -230,7 +230,7 @@ public sealed class SyncHost : IDisposable
     }
 
     private static string BuildFingerprint(SyncSettings s) =>
-        $"{s.BackendType}|{s.WebDavUrl}|{s.WebDavUsername}|{s.WebDavPassword}|{s.WebDavAllowInsecureHttp}|" +
+        $"{s.BackendType}|{s.EnableEncryption}|{s.WebDavUrl}|{s.WebDavUsername}|{s.WebDavPassword}|{s.WebDavAllowInsecureHttp}|" +
         $"{s.S3Endpoint}|{s.S3Bucket}|{s.S3BasePrefix}|{s.S3AccessKey}|{s.S3SecretKey}";
 
     private string GetDeviceId()

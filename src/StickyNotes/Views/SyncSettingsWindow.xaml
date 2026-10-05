@@ -171,7 +171,25 @@
 
                         <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,10,0,10" />
 
-                        <!-- 5. 间隔与操作 -->
+                        <!-- 5. 远端数据加密 -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="启用远端数据加密" Style="{StaticResource Type.SettingTitle}" />
+                                <TextBlock Text="便签正文经 AES-256 加密存入远端，服务商无法查看内容。"
+                                           Style="{StaticResource Type.CaptionSubtle}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding SyncEnableEncryption, Mode=TwoWay}"
+                                             VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="{StaticResource Fluent.SubtleBorderBrush}" Margin="0,10,0,10" />
+
+                        <!-- 6. 间隔与操作 -->
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

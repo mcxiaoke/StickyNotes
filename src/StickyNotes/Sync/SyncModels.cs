@@ -59,11 +59,27 @@ public static class SyncProtocol
 {
     public const int SchemaVersion = 1;
 
+    /// <summary>明文同步模式子目录前缀</summary>
+    public const string DataPrefix = "stickynotes-data/";
+
+    /// <summary>密文保险箱同步模式子目录前缀</summary>
+    public const string VaultPrefix = "stickynotes-vault/";
+
+    /// <summary>远端口令校验探针文件名称</summary>
+    public const string VerifierKey = ".auth_verifier";
+
+    /// <summary>探针内固定的成功魔数标识</summary>
+    public const string AuthVerifierMagic = "STICKYNOTES_AUTH_OK";
+
     /// <summary>便签对象统一存放的 key 前缀</summary>
     public const string NotesPrefix = "notes/";
 
     /// <summary>单文件防呆上限：超过视为异常数据，跳过并记日志</summary>
     public const int MaxNoteFileBytes = 4 * 1024 * 1024;
+
+    /// <summary>获取当前加密模式对应的存储子目录</summary>
+    public static string GetEffectiveSubdirectory(bool enableEncryption) =>
+        enableEncryption ? VaultPrefix : DataPrefix;
 
     /// <summary>远端文件名：小写 Guid "D" 格式 + .json</summary>
     public static string NoteKey(Guid id) => $"{NotesPrefix}{id.ToString("D")}.json";
@@ -109,7 +125,7 @@ public static class SyncProtocol
 
     /// <summary>
     /// 防御性解析：坏文件/陌生格式返回 null（调用方跳过并记日志，绝不中断整轮）。
-    /// 校验：schemaVersion 已知、id 与（可选传入的）key 一致。
+    /// 校验：schemaVersion 已知、id 与（可选传入的）key 一致、明密文互斥合法。
     /// </summary>
     public static SyncNoteDto? TryDeserialize(string json, string? expectedKey = null)
     {
@@ -126,6 +142,12 @@ public static class SyncProtocol
         if (dto == null) return null;
         if (dto.Id == Guid.Empty) return null;
         if (dto.SchemaVersion > SchemaVersion) return null;
+        if (!string.IsNullOrEmpty(dto.Iv) ^ !string.IsNullOrEmpty(dto.Payload)) return null; // IV 与 Payload 必须成对出现
+        if (dto.Content != null && dto.IsEncrypted) return null;  // 明密文同时存在（非法格式）
+        if (!dto.IsEncrypted)
+        {
+            dto.Content ??= string.Empty; // 明文模式若正文字段缺失/为 null 则规范为空串
+        }
         if (expectedKey != null && !string.Equals(NoteKey(dto.Id), expectedKey, StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -150,14 +172,53 @@ public sealed class UtcRoundtripDateTimeConverter : JsonConverter<DateTime>
     private static DateTime EnsureUtc(DateTime value) => SyncProtocol.EnsureUtc(value);
 }
 
-/// <summary>同步协议 v1 便签 DTO（wire 格式字段与 docs/SYNC-PROTOCOL-DESIGN-20261004.md §3.2 一致）</summary>
+/// <summary>远端口令校验探针文件模型（.auth_verifier）</summary>
+public sealed class AuthVerifierDto
+{
+    public int Version { get; set; } = 1;
+    public string Iv { get; set; } = string.Empty;
+    public string Payload { get; set; } = string.Empty;
+
+    public static string Create(string secret)
+    {
+        var (iv, payload) = CryptoHelper.CreateMagicPayload(SyncProtocol.AuthVerifierMagic, secret);
+        return JsonSerializer.Serialize(new AuthVerifierDto { Iv = iv, Payload = payload }, SyncProtocol.JsonOptions);
+    }
+
+    public static bool Verify(string json, string secret)
+    {
+        try
+        {
+            var dto = JsonSerializer.Deserialize<AuthVerifierDto>(json, SyncProtocol.JsonOptions);
+            if (dto == null || string.IsNullOrEmpty(dto.Iv) || string.IsNullOrEmpty(dto.Payload)) return false;
+            var unwrapped = CryptoHelper.UnwrapMagicPayload(dto.Iv, dto.Payload, secret);
+            return string.Equals(unwrapped, SyncProtocol.AuthVerifierMagic, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}
+
+/// <summary>同步协议 v1 便签 DTO（支持明文与 stickynotes-vault 密文两种 wire 格式）</summary>
 public sealed class SyncNoteDto
 {
     public int SchemaVersion { get; set; } = SyncProtocol.SchemaVersion;
 
     public Guid Id { get; set; }
 
-    public string Content { get; set; } = string.Empty;
+    /// <summary>明文便签正文（密文模式为 null）</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Content { get; set; }
+
+    /// <summary>密文模式 IV 向量 Base64（明文模式为 null）</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Iv { get; set; }
+
+    /// <summary>密文模式载荷 Base64（明文模式为 null）</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Payload { get; set; }
 
     public NoteColor Color { get; set; } = NoteColor.Yellow;
 
@@ -173,7 +234,11 @@ public sealed class SyncNoteDto
 
     public string? DeviceId { get; set; }
 
-    /// <summary>从本地实体构造 DTO（内容按协议规范化为 \n；本地不迁移换行）</summary>
+    /// <summary>是否为密文便签（包含有效的 Iv 与 Payload，且 Content 为 null）</summary>
+    [JsonIgnore]
+    public bool IsEncrypted => !string.IsNullOrEmpty(Payload) && !string.IsNullOrEmpty(Iv);
+
+    /// <summary>从本地实体构造明文 DTO</summary>
     public static SyncNoteDto FromNote(Note note, string deviceId) => new()
     {
         Id = note.Id,
@@ -187,12 +252,33 @@ public sealed class SyncNoteDto
         DeviceId = string.IsNullOrWhiteSpace(deviceId) ? null : deviceId
     };
 
+    /// <summary>从本地实体构造密文 DTO（正文经 AES-256 加密存入 Payload，Content 置 null）</summary>
+    public static SyncNoteDto FromNoteEncrypted(Note note, string deviceId, string secret, byte[]? fixedIv = null)
+    {
+        var normalized = SyncProtocol.NormalizeContent(note.Content);
+        var (iv, payload) = CryptoHelper.CreateMagicPayload(normalized, secret, fixedIv);
+        return new()
+        {
+            Id = note.Id,
+            Content = null,
+            Iv = iv,
+            Payload = payload,
+            Color = note.Color,
+            IsPinnedInList = note.IsPinnedInList,
+            AlwaysOnTop = note.AlwaysOnTop,
+            IsDeleted = note.IsDeleted,
+            CreatedAt = note.CreatedAt,
+            UpdatedAt = note.UpdatedAt,
+            DeviceId = string.IsNullOrWhiteSpace(deviceId) ? null : deviceId
+        };
+    }
+
     /// <summary>
     /// 业务语义相等（决定「是否需要传输」防乒乓）：比对规范化后的内容与全部参与同步的标志位；
     /// 时间戳是裁决输入而非载荷，不参与相等判断。
     /// </summary>
     public bool BusinessEquals(SyncNoteDto other) =>
-        string.Equals(SyncProtocol.NormalizeContent(Content), SyncProtocol.NormalizeContent(other.Content), StringComparison.Ordinal)
+        string.Equals(SyncProtocol.NormalizeContent(Content ?? string.Empty), SyncProtocol.NormalizeContent(other.Content ?? string.Empty), StringComparison.Ordinal)
         && Color == other.Color
         && IsPinnedInList == other.IsPinnedInList
         && AlwaysOnTop == other.AlwaysOnTop

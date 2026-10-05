@@ -31,7 +31,7 @@ public sealed class SyncEngine
     /// 上传失败会抛出异常（本轮已应用的下行依然有效，下一轮自动补传差量）。
     /// </summary>
     public async Task<SyncRoundSummary?> RunAsync(
-        IStorageBackend backend, string deviceId, CancellationToken ct = default)
+        IStorageBackend backend, string deviceId, bool enableEncryption = false, CancellationToken ct = default)
     {
         if (!await _singleFlight.WaitAsync(0, ct).ConfigureAwait(false))
         {
@@ -41,7 +41,7 @@ public sealed class SyncEngine
 
         try
         {
-            return await RunCoreAsync(backend, deviceId, ct).ConfigureAwait(false);
+            return await RunCoreAsync(backend, deviceId, enableEncryption, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -50,8 +50,25 @@ public sealed class SyncEngine
     }
 
     private async Task<SyncRoundSummary> RunCoreAsync(
-        IStorageBackend backend, string deviceId, CancellationToken ct)
+        IStorageBackend backend, string deviceId, bool enableEncryption, CancellationToken ct)
     {
+        // 0. 若启用加密，首先校验远端探针（.auth_verifier）
+        if (enableEncryption)
+        {
+            var secret = VaultSecret.GetSecret();
+            var verifierJson = await backend.GetTextAsync(SyncProtocol.VerifierKey, ct).ConfigureAwait(false);
+            if (verifierJson == null)
+            {
+                var newVerifier = AuthVerifierDto.Create(secret);
+                await backend.PutTextAsync(SyncProtocol.VerifierKey, newVerifier, ct).ConfigureAwait(false);
+                AppLog.Info("[SyncEngine] 远端保险箱未发现校验探针，已自动初始化 .auth_verifier");
+            }
+            else if (!AuthVerifierDto.Verify(verifierJson, secret))
+            {
+                throw new InvalidOperationException("远端加密保险箱口令校验失败（.auth_verifier 无法解密或密钥不匹配），同步已安全中止。");
+            }
+        }
+
         // 1. 列出远端并全量下载解析（坏文件隔离，绝不中断整轮）
         var remoteItems = await backend.ListAsync(ct).ConfigureAwait(false);
         var remote = new ConcurrentDictionary<Guid, SyncNoteDto>();
@@ -63,6 +80,11 @@ public sealed class SyncEngine
         {
             var tasks = remoteItems.Select(async item =>
             {
+                if (string.Equals(item.Key, SyncProtocol.VerifierKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return; // 内部口令探针不是便签，静默忽略
+                }
+
                 await gate.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
@@ -80,6 +102,21 @@ public sealed class SyncEngine
                         Interlocked.Increment(ref skippedInvalid);
                         AppLog.Warn($"[SyncEngine] 跳过无法解析的远端对象 {item.Key}（坏 JSON/版本未知/id 不符）");
                         return;
+                    }
+
+                    if (dto.IsEncrypted)
+                    {
+                        try
+                        {
+                            var secret = VaultSecret.GetSecret();
+                            dto.Content = CryptoHelper.UnwrapMagicPayload(dto.Iv!, dto.Payload!, secret);
+                        }
+                        catch (Exception ex)
+                        {
+                            Interlocked.Increment(ref skippedInvalid);
+                            AppLog.Warn($"[SyncEngine] 跳过解密失败或魔数不符的密文对象 {item.Key}: {ex.Message}");
+                            return;
+                        }
                     }
 
                     remote.TryAdd(dto.Id, dto);
@@ -167,7 +204,10 @@ public sealed class SyncEngine
         int uploaded = 0;
         foreach (var note in uploads)
         {
-            var json = SyncProtocol.Serialize(SyncNoteDto.FromNote(note, deviceId));
+            var dto = enableEncryption
+                ? SyncNoteDto.FromNoteEncrypted(note, deviceId, VaultSecret.GetSecret())
+                : SyncNoteDto.FromNote(note, deviceId);
+            var json = SyncProtocol.Serialize(dto);
             await backend.PutTextAsync(SyncProtocol.NoteKey(note.Id), json, ct).ConfigureAwait(false);
             uploaded++;
         }
@@ -185,7 +225,7 @@ public sealed class SyncEngine
     private static Note ToNote(SyncNoteDto dto) => new()
     {
         Id = dto.Id,
-        Content = SyncProtocol.NormalizeContent(dto.Content),
+        Content = SyncProtocol.NormalizeContent(dto.Content ?? string.Empty),
         Color = dto.Color,
         IsPinnedInList = dto.IsPinnedInList,
         AlwaysOnTop = dto.AlwaysOnTop,

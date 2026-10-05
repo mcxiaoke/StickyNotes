@@ -32,6 +32,7 @@ public partial class SyncSettingsViewModel : ObservableObject
 
     // ---- 草稿：其余可编辑项（保存时才写回 Sync） ----
     private bool _syncEnabledDraft;
+    private bool _syncEnableEncryptionDraft;
     private bool _syncAllowInsecureHttpDraft;
     private string _syncWebDavUrlDraft = string.Empty;
     private string _syncWebDavUsernameDraft = string.Empty;
@@ -89,6 +90,7 @@ public partial class SyncSettingsViewModel : ObservableObject
         {
             var s = Sync;
             _syncEnabledDraft = s.Enabled;
+            _syncEnableEncryptionDraft = s.EnableEncryption;
             _syncAllowInsecureHttpDraft = s.WebDavAllowInsecureHttp;
             SelectedSyncBackendType = s.BackendType;
             SelectedSyncIntervalMinutes = s.EffectiveIntervalMinutes;
@@ -122,6 +124,18 @@ public partial class SyncSettingsViewModel : ObservableObject
         {
             if (_syncEnabledDraft == value) return;
             _syncEnabledDraft = value;
+            NotifyDraftChanged();
+        }
+    }
+
+    /// <summary>草稿：是否启用端到端防偷窥加密（保存时才写回 Sync）</summary>
+    public bool SyncEnableEncryption
+    {
+        get => _syncEnableEncryptionDraft;
+        set
+        {
+            if (_syncEnableEncryptionDraft == value) return;
+            _syncEnableEncryptionDraft = value;
             NotifyDraftChanged();
         }
     }
@@ -276,6 +290,7 @@ public partial class SyncSettingsViewModel : ObservableObject
         return new SyncSettings
         {
             Enabled = _syncEnabledDraft,
+            EnableEncryption = _syncEnableEncryptionDraft,
             BackendType = SelectedSyncBackendType,
             DeviceId = s.DeviceId,
             IntervalMinutes = SelectedSyncIntervalMinutes,
@@ -324,6 +339,7 @@ public partial class SyncSettingsViewModel : ObservableObject
         var draft = BuildDraftSyncSettings();
 
         s.Enabled = draft.Enabled;
+        s.EnableEncryption = draft.EnableEncryption;
         s.BackendType = draft.BackendType;
         s.IntervalMinutes = draft.IntervalMinutes;
         s.WebDavUrl = draft.WebDavUrl;
@@ -350,7 +366,7 @@ public partial class SyncSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SyncS3CredentialHint));
 
         RefreshSyncStatus();
-        AppLog.Info($"[SyncSettings] 同步配置已保存（后端={s.BackendType}, 间隔={s.IntervalMinutes}, 启用={s.Enabled}）");
+        AppLog.Info($"[SyncSettings] 同步配置已保存（后端={s.BackendType}, 间隔={s.IntervalMinutes}, 启用={s.Enabled}, 加密={s.EnableEncryption}）");
     }
 
     [RelayCommand]

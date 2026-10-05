@@ -24,3 +24,11 @@ portable.ini
 .box-agent/
 *.log
 tmp/
+
+# Local vault secrets (never commit to git)
+**/VaultSecret.local.cs
+**/sticky_notes_vault_secret.txt
+
+# Scripts dependencies / tool caches
+.dart_tool/
+

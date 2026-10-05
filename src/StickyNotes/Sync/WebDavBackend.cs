@@ -87,6 +87,17 @@ public sealed class WebDavBackend : IStorageBackend
         request.Headers.Add("Depth", "0");
         FillPropFindContent(request);
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // 首次使用根集合尚不存在，尝试创建
+            await MkColAsync(new Uri(_rootUrl), ct).ConfigureAwait(false);
+            using var retryRequest = new HttpRequestMessage(PropFindMethod, new Uri(_rootUrl));
+            retryRequest.Headers.Add("Depth", "0");
+            FillPropFindContent(retryRequest);
+            using var retryResponse = await _http.SendAsync(retryRequest, ct).ConfigureAwait(false);
+            EnsureSuccess(retryResponse, "测试连接");
+            return;
+        }
         EnsureSuccess(response, "测试连接");
     }
 

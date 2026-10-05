@@ -17,6 +17,9 @@ public sealed class SyncSettings
 {
     public bool Enabled { get; set; }
 
+    /// <summary>是否启用端到端防偷窥加密（密文存入 stickynotes-vault/，明文存入 stickynotes-data/）</summary>
+    public bool EnableEncryption { get; set; }
+
     public SyncBackendType BackendType { get; set; } = SyncBackendType.WebDav;
 
     /// <summary>设备标识（平台前缀 + 6 位随机串，如 win-8xf7ad），首启生成，评审决议 5</summary>
