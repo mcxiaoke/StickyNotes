@@ -65,8 +65,9 @@ public static class BackupService
         var builder = new SqliteConnectionStringBuilder
         {
             DataSource = sourceDbPath,
-            Mode = SqliteOpenMode.ReadOnly,
-            Cache = SqliteCacheMode.Shared
+            Mode = SqliteOpenMode.ReadOnly
+            // 不使用 Shared Cache：VACUUM INTO 持有读事务期间，Shared Cache 的表级锁
+            // 会让主流程写入收到不可重试的 SQLITE_LOCKED（P1-3）
         };
 
         using (var connection = new SqliteConnection(builder.ToString()))

@@ -282,7 +282,14 @@ public partial class NoteViewModel : ObservableObject
     /// </summary>
     public void FlushSaveBlocking()
     {
-        if (Note.IsDeleted) return;
+        if (Note.IsDeleted)
+        {
+            // 便签已归档/删除：必须先摘除防抖队列中残留的待保存调度再返回。
+            // 若直接返回，迟到的防抖任务会在行被彻底删除后经 Upsert 重新 INSERT（幽灵数据），
+            // 或在归档窗口恢复后用陈旧状态把刚恢复的便签再次抹掉（P1-2）
+            _autoSaveCoordinator.CancelPendingSave(Note.Id);
+            return;
+        }
 
         try
         {

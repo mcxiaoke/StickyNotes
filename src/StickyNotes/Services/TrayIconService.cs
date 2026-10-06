@@ -212,6 +212,9 @@ public sealed class TrayIconService : IDisposable
             // 退出顺序至关重要（F-P0-1）：先持久化置顶便签坐标 —— 此刻窗口字典仍完整；
             // 若拖到 App.OnExit 才做，Shutdown() 已先关闭全部窗口并清空字典，坐标将永久丢失。
             // 随后标记退出，使窗口 Closed 回调跳过 IsOpen=false 回写。
+            // 先置全局退出标志（P1-6）：让带未保存草稿的窗口（如同步设置）在 Closing 中
+            // 识别到退出流程并跳过确认框，避免 Shutdown 被取消后应用停留在半退出状态。
+            App.BeginShutdown();
             _windowManager.BeginShutdownAndPersistPinnedPlacement();
 
             // 最后关闭应用。

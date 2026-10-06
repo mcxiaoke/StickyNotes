@@ -198,8 +198,10 @@ public sealed class ExportImportService
                 // 绝不顺带打开桌面置顶（否则旧备份会把桌面窗口全部弹开）。
                 AlwaysOnTop = item.AlwaysOnTop ?? false,
                 IsDeleted = item.IsDeleted,
-                WindowX = item.WindowX > 0 ? item.WindowX : 150,
-                WindowY = item.WindowY > 0 ? item.WindowY : 150,
+                // 虚拟桌面坐标允许为负（主屏左侧的副屏是合法位置，P1-5），
+                // 仅对 NaN/非有限值回落默认坐标，不得用 > 0 判定合法性
+                WindowX = double.IsFinite(item.WindowX) ? item.WindowX : 150,
+                WindowY = double.IsFinite(item.WindowY) ? item.WindowY : 150,
                 WindowWidth = item.WindowWidth >= 280 ? item.WindowWidth : 380,
                 WindowHeight = item.WindowHeight >= 240 ? item.WindowHeight : 420,
                 // 旧备份未记录 IsOpen 时保持既有行为（导入后不自动弹出窗口），仅在备份明确记录时还原

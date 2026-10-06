@@ -18,7 +18,9 @@ public sealed class SqliteDatabaseContext
         {
             DataSource = targetDb,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared,
+            // 不使用 Shared Cache：该模式下 SQLite 退化为表级锁且 SQLITE_LOCKED 不受
+            // busy_timeout 重试保护，与备份 VACUUM INTO 的读事务并发时会导致写入
+            // 抛出不可重试的异常（P1-3）。WAL 已足够支撑并发读，去掉即可。
             ForeignKeys = true,
             DefaultTimeout = 5
         };

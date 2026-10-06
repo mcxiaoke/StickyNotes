@@ -117,6 +117,20 @@ public partial class SyncSettingsViewModel : ObservableObject
         RefreshSyncStatus();
     }
 
+    /// <summary>
+    /// 解除对单例 <see cref="SyncHost"/>.StateChanged 的订阅（P2-7）。
+    /// 本 VM 注册为 Transient 而 SyncHost 是单例：窗口关闭后若不摘除订阅，
+    /// 单例会经事件委托长期持有已关闭的 VM → 窗口 → 整棵视觉树，反复开关窗口持续泄漏，
+    /// 且每次状态变化都向全部历史实例派发刷新。由 SyncSettingsWindow.Closed 调用。
+    /// </summary>
+    public void DetachSyncHostEvents()
+    {
+        if (_syncHost != null)
+        {
+            _syncHost.StateChanged -= RefreshSyncStatusOnDispatcher;
+        }
+    }
+
     public bool SyncEnabled
     {
         get => _syncEnabledDraft;

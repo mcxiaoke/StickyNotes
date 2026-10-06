@@ -83,8 +83,10 @@ public sealed class WindowManager
 
         var window = new NoteWindow(vm);
 
-        // 如果坐标属于未初始化的默认值，或者与现有窗口完全重叠，计算主窗口右侧防遮挡错开坐标
-        bool isDefaultOrUnset = note.WindowX <= 0
+        // 如果坐标属于未初始化的默认值，或者与现有窗口完全重叠，计算主窗口右侧防遮挡错开坐标。
+        // 虚拟桌面坐标允许为负（主屏左侧的副屏是合法位置），不能用 WindowX <= 0 判定未初始化，
+        // 否则左屏便签每次打开都被强制搬回主屏并落库，布局永久丢失（P1-5）
+        bool isDefaultOrUnset = double.IsNaN(note.WindowX) || double.IsNaN(note.WindowY)
             || (Math.Abs(note.WindowX - Note.DefaultWindowX) < 1 && Math.Abs(note.WindowY - Note.DefaultWindowY) < 1);
         bool isOverlapping = _activeNoteWindows.Values.Any(w => Math.Abs(w.Left - note.WindowX) < 6 && Math.Abs(w.Top - note.WindowY) < 6);
 
@@ -146,6 +148,11 @@ public sealed class WindowManager
                 AppLog.Info($"[WindowManager] 便签 {note.Id} 窗口随应用退出关闭，保持 IsOpen 不变");
                 return;
             }
+
+            // 内存实例与库同步回写：列表与便签窗口共享同一 Note 实例，若只写库不清内存标记，
+            // 列表侧随后的全行 Upsert（置顶/换色等）会把陈旧的 IsOpen=true 带回数据库，
+            // 下次启动时用户已关闭的便签被错误复活（P1-1）
+            note.IsOpen = false;
 
             try
             {
