@@ -20,10 +20,12 @@ public sealed class SyncEngine
 
     private readonly INoteRepository _repository;
     private readonly SemaphoreSlim _singleFlight = new(1, 1);
+    private readonly Services.HardDeleteLedger? _hardDeleteLedger;
 
-    public SyncEngine(INoteRepository repository)
+    public SyncEngine(INoteRepository repository, Services.HardDeleteLedger? hardDeleteLedger = null)
     {
         _repository = repository;
+        _hardDeleteLedger = hardDeleteLedger;
     }
 
     /// <summary>
@@ -160,6 +162,9 @@ public sealed class SyncEngine
         var localNotes = await _repository.GetAllAsync(ct).ConfigureAwait(false);
         var snapshot = localNotes.ToDictionary(n => n.Id);
 
+        // 硬删除台账（P2-1）：本机彻底删除过的 id 不允许被云端回流复活
+        var hardDeleted = _hardDeleteLedger?.GetEntries() ?? new Dictionary<Guid, DateTime>();
+
         var downloads = new List<RemoteApplyItem>();
         var uploads = new List<Note>();
 
@@ -177,6 +182,31 @@ public sealed class SyncEngine
 
             if (localNote == null && remoteDto != null)
             {
+                if (hardDeleted.TryGetValue(id, out var deletedAt))
+                {
+                    if (remoteDto.UpdatedAt <= SyncProtocol.EnsureUtc(deletedAt))
+                    {
+                        // 云端版本不新于本机删除时刻（P2-1）：推墓碑覆盖云端，止住回流。
+                        // 与软删墓碑语义一致（保留正文，仅 IsDeleted 翻转）；下轮起云端已是
+                        // 同内容墓碑，BusinessEquals 判等，不再产生任何传输。
+                        var tombstone = ToNote(remoteDto);
+                        tombstone.IsDeleted = true;
+                        tombstone.UpdatedAt = SyncProtocol.EnsureUtc(deletedAt);
+                        if (!SyncNoteDto.FromNote(tombstone, deviceId).BusinessEquals(remoteDto))
+                        {
+                            uploads.Add(tombstone);
+                        }
+                    }
+                    else
+                    {
+                        // 云端在删除后被其他设备编辑过：编辑胜过删除（与 LWW 一致），
+                        // 但本机台账仍否决下行，绝不静默把「已彻底删除」的便签插回桌面
+                        AppLog.Info($"[SyncEngine] 便签 {id} 在本机硬删除后被其他设备更新，本轮跳过下行（台账否决）");
+                    }
+
+                    continue;
+                }
+
                 // 远端新便签（含其他设备的墓碑，回流入库为不可见行）
                 downloads.Add(new RemoteApplyItem(ToNote(remoteDto), null));
             }

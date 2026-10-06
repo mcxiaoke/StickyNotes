@@ -3,6 +3,7 @@ using System.Net.Http;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using StickyNotes.Data;
 using StickyNotes.Models;
+using StickyNotes.Services;
 using StickyNotes.Sync;
 
 namespace StickyNotes.Tests;
@@ -17,18 +18,22 @@ public class SyncEngineTests
     private const string DeviceA = "win-aaaaaa";
     private const string DeviceB = "win-bbbbbb";
 
-    private static NoteRepository CreateRepository(out string directory)
+    private static NoteRepository CreateRepository(out string directory, HardDeleteLedger? hardDeleteLedger = null)
     {
         directory = Path.Combine(TestEnvironment.TempRoot, "sync-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var context = new SqliteDatabaseContext(Path.Combine(directory, "notes.db"));
         context.InitializeAndMigrateAsync().GetAwaiter().GetResult();
-        return new NoteRepository(context);
+        return new NoteRepository(context, hardDeleteLedger);
     }
 
-    /// <summary>以指定仓储为「一台设备」跑一轮同步</summary>
-    private static SyncRoundSummary Run(NoteRepository repo, FakeStorageBackend backend, string deviceId)
-        => new SyncEngine(repo).RunAsync(backend, deviceId).GetAwaiter().GetResult()!;
+    /// <summary>独立临时台账文件（每用例一份，互不污染）</summary>
+    private static HardDeleteLedger NewLedger()
+        => new(Path.Combine(TestEnvironment.TempRoot, $"hard-deleted-{Guid.NewGuid():N}.json"));
+
+    /// <summary>以指定仓储为「一台设备」跑一轮同步；台账与仓储须成对传入</summary>
+    private static SyncRoundSummary Run(NoteRepository repo, FakeStorageBackend backend, string deviceId, HardDeleteLedger? ledger = null)
+        => new SyncEngine(repo, ledger).RunAsync(backend, deviceId).GetAwaiter().GetResult()!;
 
     private static Note NewNote(string content, DateTime? updatedAt = null, bool isDeleted = false) => new()
     {
@@ -287,6 +292,90 @@ public class SyncEngineTests
         Run(repoB, backend, DeviceB);
 
         Assert.AreEqual(0, (await repoB.GetAllActiveAsync()).Count(n => n.Id == note.Id), "删除时间戳更新 → 墓碑胜出");
+    }
+
+    // ---- 硬删除台账（P2-1）----
+
+    [TestMethod]
+    public async Task HardDeletedNote_PushesTombstoneToCloud_AndIsIdempotent()
+    {
+        var ledger = NewLedger();
+        var repo = CreateRepository(out _, ledger);
+        var backend = new FakeStorageBackend();
+
+        var note = NewNote("gone-for-good");
+        await repo.SaveAsync(note);
+        Run(repo, backend, DeviceA, ledger);            // 上传活动版本
+        await repo.HardDeleteAsync(note.Id);
+
+        var summary = Run(repo, backend, DeviceA, ledger);
+
+        Assert.AreEqual(1, summary.Uploaded, "硬删除后应向云端推送墓碑止住回流");
+        StringAssert.Contains(backend.Objects[SyncProtocol.NoteKey(note.Id)], "\"isDeleted\":true");
+
+        // 幂等：云端已是同内容墓碑，后续轮次零传输
+        var putsBefore = backend.PutCount;
+        var summary2 = Run(repo, backend, DeviceA, ledger);
+        Assert.AreEqual(0, summary2.Uploaded);
+        Assert.AreEqual(putsBefore, backend.PutCount);
+    }
+
+    [TestMethod]
+    public async Task HardDeletedNote_DoesNotReflow_EvenWhenCloudTombstoneExists()
+    {
+        // 清空回收站后反复回填的老问题：两台设备各自硬删除，台账否决云端墓碑回流
+        var ledgerA = NewLedger();
+        var ledgerB = NewLedger();
+        var repoA = CreateRepository(out _, ledgerA);
+        var repoB = CreateRepository(out _, ledgerB);
+        var backend = new FakeStorageBackend();
+
+        var note = NewNote("shared");
+        await repoA.SaveAsync(note);
+        Run(repoA, backend, DeviceA, ledgerA);
+        Run(repoB, backend, DeviceB, ledgerB);
+
+        await repoA.HardDeleteAsync(note.Id);
+        Run(repoA, backend, DeviceA, ledgerA);           // 云端被 A 的墓碑覆盖
+
+        await repoB.HardDeleteAsync(note.Id);
+        var summaryB = Run(repoB, backend, DeviceB, ledgerB);
+
+        Assert.AreEqual(0, summaryB.Downloaded, "台账否决云端回流");
+        Assert.AreEqual(0, summaryB.Uploaded, "云端已是墓碑，无需重传");
+        Assert.AreEqual(0, (await repoB.GetAllAsync()).Count(n => n.Id == note.Id), "本地不再出现该行");
+    }
+
+    [TestMethod]
+    public async Task RemoteEditAfterHardDelete_IsNotDownloadedBack()
+    {
+        // 硬删除后另一设备编辑（较新活动版本）：编辑胜过删除保留在云端，
+        // 但台账否决其回流本机——不静默复活已彻底删除的便签
+        var ledgerA = NewLedger();
+        var repoA = CreateRepository(out _, ledgerA);
+        var repoB = CreateRepository(out _);
+        var backend = new FakeStorageBackend();
+
+        var note = NewNote("original");
+        await repoA.SaveAsync(note);
+        Run(repoA, backend, DeviceA, ledgerA);
+        Run(repoB, backend, DeviceB);
+
+        await repoA.HardDeleteAsync(note.Id);
+        Run(repoA, backend, DeviceA, ledgerA);           // 云端墓碑
+
+        var localB = (await repoB.GetByIdAsync(note.Id))!;
+        localB.IsDeleted = false;
+        localB.Content = "edited-after-delete";
+        localB.UpdatedAt = DateTime.UtcNow;
+        await repoB.SaveAsync(localB);
+        Run(repoB, backend, DeviceB);                     // 云端变为 B 的较新活动版本
+
+        var summaryA = Run(repoA, backend, DeviceA, ledgerA);
+
+        Assert.IsNull(await repoA.GetByIdAsync(note.Id), "台账否决：删除后被远端编辑也不得回流本机");
+        Assert.AreEqual(0, summaryA.Uploaded);
+        StringAssert.Contains(backend.Objects[SyncProtocol.NoteKey(note.Id)], "edited-after-delete", "云端内容保留远端编辑");
     }
 
     // ---- 防御性解析 ----

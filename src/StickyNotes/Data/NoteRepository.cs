@@ -11,10 +11,12 @@ namespace StickyNotes.Data;
 public sealed class NoteRepository : INoteRepository
 {
     private readonly SqliteDatabaseContext _context;
+    private readonly StickyNotes.Services.HardDeleteLedger? _hardDeleteLedger;
 
-    public NoteRepository(SqliteDatabaseContext context)
+    public NoteRepository(SqliteDatabaseContext context, StickyNotes.Services.HardDeleteLedger? hardDeleteLedger = null)
     {
         _context = context;
+        _hardDeleteLedger = hardDeleteLedger;
     }
 
     private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken = default)
@@ -264,17 +266,40 @@ public sealed class NoteRepository : INoteRepository
 
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
         AppLog.Warn($"[NoteRepository] 彻底删除便签 {id}（不可撤销），受影响行数={affected}");
+
+        // 记入硬删除台账（P2-1）：否则云端残留对象会在下轮同步被判为「远端新便签」回流复活
+        if (affected > 0)
+        {
+            _hardDeleteLedger?.Record(new[] { id }, DateTime.UtcNow);
+        }
     }
 
     public async Task ClearAllArchivedAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
 
+        // 先取待删 id 再删除：清空归档同样要记台账（P2-1），否则全部墓碑都会回流
+        var ids = new List<Guid>();
+        await using (var selectCommand = connection.CreateCommand())
+        {
+            selectCommand.CommandText = "SELECT Id FROM Notes WHERE IsDeleted = 1;";
+            await using var reader = await selectCommand.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                ids.Add(Guid.Parse(reader.GetString(0)));
+            }
+        }
+
         await using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM Notes WHERE IsDeleted = 1;";
 
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
         AppLog.Warn($"[NoteRepository] 清空全部已归档便签（不可撤销），受影响行数={affected}");
+
+        if (affected > 0)
+        {
+            _hardDeleteLedger?.Record(ids, DateTime.UtcNow);
+        }
     }
 
     public async Task UpdateWindowBoundsAsync(

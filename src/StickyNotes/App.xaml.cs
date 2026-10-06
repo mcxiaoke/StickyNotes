@@ -313,6 +313,8 @@ public partial class App : Application
     {
         // 核心基础设施与数据层
         services.AddSingleton<SqliteDatabaseContext>();
+        // 硬删除台账（P2-1）：仓储写入、同步引擎读取，先于其消费者注册
+        services.AddSingleton<HardDeleteLedger>();
         services.AddSingleton<INoteRepository, NoteRepository>();
 
         // 领域服务与配置
