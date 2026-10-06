@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using StickyNotes.Data;
+using StickyNotes.Infrastructure;
 using StickyNotes.Messages;
 using StickyNotes.Models;
 using StickyNotes.Services;
@@ -76,7 +77,15 @@ public partial class ArchivedNotesViewModel : ObservableObject
         // 监听便签归档消息，若归档窗口开启中，自动拉取新归档
         WeakReferenceMessenger.Default.Register<NoteArchivedMessage>(this, async (_, _) =>
         {
-            await LoadArchivedNotesAsync();
+            try
+            {
+                await LoadArchivedNotesAsync();
+            }
+            catch (Exception ex)
+            {
+                // MessageHandler 委托等价 async void：数据库/IO 异常不允许直接终止进程（P2-5）
+                AppLog.Error($"[ArchivedNotesViewModel] 归档列表自动刷新失败: {ex.Message}", ex);
+            }
         });
     }
 

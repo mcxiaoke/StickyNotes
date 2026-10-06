@@ -56,7 +56,15 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
             RestoreWindowPlacement();
             // 初始锁定：启用 PIN 时窗口一打开即被遮罩覆盖
             PinOverlay.IsLocked = _pinService?.IsPinEnabled ?? false;
-            await ViewModel.LoadNotesAsync();
+            try
+            {
+                await ViewModel.LoadNotesAsync();
+            }
+            catch (Exception ex)
+            {
+                // 数据库/IO 异常不允许在 async void 中崩溃进程（P2-5）
+                AppLog.Error($"[NotesListWindow] 加载便签列表失败: {ex.Message}", ex);
+            }
         };
 
         // 锁定规则：每次窗口从不可见变为可见（启动/托盘唤醒）都重新上锁；隐藏或收起时清空搜索词
@@ -265,7 +273,15 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender is MenuItem { DataContext: Note note })
         {
-            await ViewModel.TogglePinNoteCommand.ExecuteAsync(note);
+            try
+            {
+                await ViewModel.TogglePinNoteCommand.ExecuteAsync(note);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[NotesListWindow] 置顶便签 {note.Id} 失败: {ex.Message}", ex);
+                ShowInfoBar($"置顶失败：{ex.Message}", InfoBarSeverity.Error);
+            }
         }
     }
 
@@ -385,7 +401,15 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender is MenuItem { DataContext: Note note })
         {
-            await ViewModel.DeleteNoteCommand.ExecuteAsync(note);
+            try
+            {
+                await ViewModel.DeleteNoteCommand.ExecuteAsync(note);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[NotesListWindow] 归档便签 {note.Id} 失败: {ex.Message}", ex);
+                ShowInfoBar($"归档失败：{ex.Message}", InfoBarSeverity.Error);
+            }
         }
     }
 

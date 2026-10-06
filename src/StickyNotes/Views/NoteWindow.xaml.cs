@@ -71,7 +71,16 @@ public partial class NoteWindow : Window
         {
             // 无待保存改动时短路，避免「在便签与列表间来回切换 = 每切一次一条全量 UPDATE」（原 F-P2-10）
             if (!ViewModel.HasPendingChanges) return;
-            await ViewModel.FlushSaveAsync();
+
+            try
+            {
+                await ViewModel.FlushSaveAsync();
+            }
+            catch (Exception ex)
+            {
+                // FlushSaveAsync 内部已兜底，此处防御意外异常终止失焦续体（P2-5）
+                AppLog.Error($"[NoteWindow] 失焦刷盘异常: {ex.Message}", ex);
+            }
 
             // 失焦是标题刷新的最佳时机：此刻正文已落库，任务栏标题立即可读，
             // 不必等下一个 3 秒周期。
@@ -82,8 +91,17 @@ public partial class NoteWindow : Window
         // 「全部窗口 Closed → App.OnExit → 进程结束」这一真实时序下根本不会执行，
         // 导致最后 500ms 输入不落库、也不广播到主列表（原 F-P1-4）。
         // 复用 AutoSaveCoordinator 中已验证不会死锁的 ConfigureAwait(false).GetAwaiter().GetResult() 模式。
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
+            // 应用退出流程中不做失败拦截（P2-6）：退出时序（F-P0-1）要求窗口必须能正常关闭，
+            // 退出刷盘失败只留日志
+            if (App.IsShuttingDown)
+            {
+                try { ViewModel.FlushSaveBlocking(); }
+                catch (Exception ex) { AppLog.Error($"[NoteWindow] 退出刷盘失败: {ex.Message}", ex); }
+                return;
+            }
+
             try
             {
                 ViewModel.FlushSaveBlocking();
@@ -91,6 +109,26 @@ public partial class NoteWindow : Window
             catch (Exception ex)
             {
                 AppLog.Error($"[NoteWindow] 关闭时同步刷盘失败: {ex.Message}", ex);
+            }
+
+            // 刷盘失败不再静默关窗（P2-6）：磁盘满/文件被占用时直接关窗，
+            // 「保存失败」的唯一反馈载体（底部状态栏）随窗口一起销毁，最后一段编辑无声丢失。
+            // 拦截关闭，由用户选择重试或放弃；已删除便签不在此列（IsDeleted 走取消路径）。
+            if (!ViewModel.Note.IsDeleted && ViewModel.SaveState == NoteSaveState.Failed)
+            {
+                var choice = MessageBox.Show(
+                    this,
+                    "便签内容尚未成功保存（可能是磁盘已满或文件被占用）。\n\n" +
+                    "「确定」：放弃本次更改并关闭窗口；\n" +
+                    "「取消」：留在便签，稍后点击底部状态栏重试，或先复制正文再手动关闭。",
+                    "保存失败",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning);
+
+                if (choice == MessageBoxResult.Cancel)
+                {
+                    e.Cancel = true;
+                }
             }
         };
     }
@@ -176,7 +214,17 @@ public partial class NoteWindow : Window
         if (sender is Button btn && btn.Tag is NoteColor color)
         {
             MoreMenuPopup.IsOpen = false;
-            await ViewModel.SetColorAsync(color);
+            try
+            {
+                await ViewModel.SetColorAsync(color);
+            }
+            catch (Exception ex)
+            {
+                // 数据库/IO 异常不允许打到 async void 崩溃进程（P2-5）
+                AppLog.Error($"[NoteWindow] 修改便签颜色失败: {ex.Message}", ex);
+                MessageBox.Show(this, $"修改颜色失败：{ex.Message}", "操作失败",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
@@ -227,7 +275,20 @@ public partial class NoteWindow : Window
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
         MoreMenuPopup.IsOpen = false;
-        await ViewModel.DeleteAsync();
+        try
+        {
+            await ViewModel.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            // 归档未落库时保留窗口并给出提示，避免用户误以为删除成功（P2-5）；
+            // 原实现在此异常时其后的 Close() 不执行，窗口滞留却无任何反馈
+            AppLog.Error($"[NoteWindow] 删除便签失败: {ex.Message}", ex);
+            MessageBox.Show(this, $"删除便签失败：{ex.Message}", "操作失败",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
         Close();
     }
 

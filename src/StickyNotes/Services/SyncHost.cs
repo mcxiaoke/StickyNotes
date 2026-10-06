@@ -31,10 +31,15 @@ public sealed class SyncHost : IDisposable
     private readonly SyncStateStore _stateStore;
 
     private readonly object _triggerGate = new();
+    private readonly object _backendGate = new();
     private CancellationTokenSource? _pendingTriggerCts;
     private Timer? _timer;
     private IStorageBackend? _backend;
     private string? _backendFingerprint;
+    // P2-3：被配置变更替换的旧后端挂入退役列表，待确认无在途使用者后再 Dispose，
+    // 避免释放仍被上传中的同步轮持有的实例（含其 HttpClient）
+    private readonly List<IStorageBackend> _retiredBackends = new();
+    private readonly Dictionary<IStorageBackend, int> _backendUsage = new();
     private bool _started;
 
     /// <summary>同步状态变化（成功/失败）后触发，设置页据此刷新展示</summary>
@@ -120,7 +125,7 @@ public sealed class SyncHost : IDisposable
             return null;
         }
 
-        var backend = GetOrBuildBackend(settings);
+        var backend = AcquireBackend(settings);
         if (backend == null)
         {
             return null;
@@ -172,6 +177,11 @@ public sealed class SyncHost : IDisposable
             AppLog.Error($"[SyncHost] 同步失败({reason}): {ex.Message}", ex);
             OnStateChanged();
             return null;
+        }
+        finally
+        {
+            // 本轮已结束，按引用计数归还：现役后端保留复用，已被替换的后端在无在途使用者时释放（P2-3）
+            ReleaseBackend(backend);
         }
     }
 
@@ -232,28 +242,92 @@ public sealed class SyncHost : IDisposable
             null, dueTime, dueTime);
     }
 
-    private IStorageBackend? GetOrBuildBackend(SyncSettings settings)
+    /// <summary>
+    /// 获取（或按配置指纹重建）同步后端，并登记一次「使用中」引用（P2-3）。
+    /// 取/建全程持锁串行化，避免并发触发源（定时器/防抖/设置变更/手动）同时重建互相覆盖；
+    /// 被替换的旧实例不立即 Dispose——它可能仍被在途同步轮持有，挂入退役列表，
+    /// 待 <see cref="ReleaseBackend"/> 确认无任何使用者后再释放。
+    /// </summary>
+    private IStorageBackend? AcquireBackend(SyncSettings settings)
     {
         var fingerprint = BuildFingerprint(settings);
-        if (_backend != null && string.Equals(_backendFingerprint, fingerprint, StringComparison.Ordinal))
+        lock (_backendGate)
         {
+            if (_backend == null || !string.Equals(_backendFingerprint, fingerprint, StringComparison.Ordinal))
+            {
+                if (_backend != null)
+                {
+                    _retiredBackends.Add(_backend);
+                }
+
+                _backend = null;
+                _backendFingerprint = null;
+
+                try
+                {
+                    _backend = StorageBackendFactory.Create(settings);
+                    _backendFingerprint = fingerprint;
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error($"[SyncHost] 构建同步后端失败: {ex.Message}", ex);
+                    return null;
+                }
+            }
+
+            _backendUsage[_backend] = _backendUsage.GetValueOrDefault(_backend) + 1;
             return _backend;
         }
+    }
 
-        _backend?.Dispose();
-        _backend = null;
-        _backendFingerprint = null;
-
-        try
+    /// <summary>
+    /// 归还一次后端引用（P2-3）：引用归零且已退役的后端在此统一 Dispose；
+    /// 现役后端即使引用归零也保留复用。顺带清理更早退役、已无使用者的中间实例。
+    /// </summary>
+    private void ReleaseBackend(IStorageBackend backend)
+    {
+        List<IStorageBackend>? toDispose = null;
+        lock (_backendGate)
         {
-            _backend = StorageBackendFactory.Create(settings);
-            _backendFingerprint = fingerprint;
-            return _backend;
+            var remaining = _backendUsage.GetValueOrDefault(backend) - 1;
+            if (remaining > 0)
+            {
+                _backendUsage[backend] = remaining;
+            }
+            else
+            {
+                _backendUsage.Remove(backend);
+
+                toDispose = new List<IStorageBackend>();
+                if (_retiredBackends.Remove(backend))
+                {
+                    toDispose.Add(backend);
+                }
+
+                for (int i = _retiredBackends.Count - 1; i >= 0; i--)
+                {
+                    var retired = _retiredBackends[i];
+                    if (!_backendUsage.ContainsKey(retired))
+                    {
+                        _retiredBackends.RemoveAt(i);
+                        toDispose.Add(retired);
+                    }
+                }
+            }
         }
-        catch (Exception ex)
+
+        if (toDispose == null) return;
+
+        foreach (var retired in toDispose)
         {
-            AppLog.Error($"[SyncHost] 构建同步后端失败: {ex.Message}", ex);
-            return null;
+            try
+            {
+                retired.Dispose();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"[SyncHost] 释放旧同步后端失败: {ex.Message}");
+            }
         }
     }
 
@@ -331,7 +405,24 @@ public sealed class SyncHost : IDisposable
         _timer = null;
         NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
         WeakReferenceMessenger.Default.UnregisterAll(this);
-        _backend?.Dispose();
-        _backend = null;
+
+        lock (_backendGate)
+        {
+            if (_backend != null)
+            {
+                try { _backend.Dispose(); }
+                catch (Exception ex) { AppLog.Warn($"[SyncHost] 释放同步后端失败: {ex.Message}"); }
+                _backend = null;
+            }
+
+            foreach (var retired in _retiredBackends)
+            {
+                try { retired.Dispose(); }
+                catch (Exception ex) { AppLog.Warn($"[SyncHost] 释放退役同步后端失败: {ex.Message}"); }
+            }
+            _retiredBackends.Clear();
+            _backendUsage.Clear();
+            _backendFingerprint = null;
+        }
     }
 }

@@ -38,7 +38,18 @@ public partial class ArchivedNotesWindow : Wpf.Ui.Controls.FluentWindow
                 .FirstOrDefault() is { IsContentAccessible: true };
             PinOverlay.IsLocked = (_pinService?.IsPinEnabled ?? false) && !listUnlocked;
 
-            await ViewModel.LoadArchivedNotesAsync();
+            try
+            {
+                await ViewModel.LoadArchivedNotesAsync();
+            }
+            catch (Exception ex)
+            {
+                // 数据库/IO 异常不允许在 async void 中崩溃进程（P2-5）
+                AppLog.Error($"[ArchivedNotesWindow] 加载归档列表失败: {ex.Message}", ex);
+                MessageBox.Show(this, $"加载归档列表失败：{ex.Message}", "错误",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
             FocusArchivedList();
         };
 
@@ -113,7 +124,16 @@ public partial class ArchivedNotesWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender is FrameworkElement { DataContext: Note note })
         {
-            await ViewModel.RestoreNoteCommand.ExecuteAsync(note);
+            try
+            {
+                await ViewModel.RestoreNoteCommand.ExecuteAsync(note);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[ArchivedNotesWindow] 恢复便签 {note.Id} 失败: {ex.Message}", ex);
+                MessageBox.Show(this, $"恢复便签失败：{ex.Message}", "操作失败",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
@@ -132,7 +152,16 @@ public partial class ArchivedNotesWindow : Wpf.Ui.Controls.FluentWindow
 
             if (result == MessageBoxResult.Yes)
             {
-                await ViewModel.HardDeleteNoteCommand.ExecuteAsync(note);
+                try
+                {
+                    await ViewModel.HardDeleteNoteCommand.ExecuteAsync(note);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error($"[ArchivedNotesWindow] 彻底删除便签 {note.Id} 失败: {ex.Message}", ex);
+                    MessageBox.Show(this, $"彻底删除失败：{ex.Message}", "操作失败",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
     }
@@ -149,7 +178,16 @@ public partial class ArchivedNotesWindow : Wpf.Ui.Controls.FluentWindow
 
         if (result == MessageBoxResult.Yes)
         {
-            await ViewModel.ClearAllArchivedCommand.ExecuteAsync(null);
+            try
+            {
+                await ViewModel.ClearAllArchivedCommand.ExecuteAsync(null);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"[ArchivedNotesWindow] 清空归档失败: {ex.Message}", ex);
+                MessageBox.Show(this, $"清空归档失败：{ex.Message}", "操作失败",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }
