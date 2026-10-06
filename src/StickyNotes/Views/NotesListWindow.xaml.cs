@@ -807,33 +807,50 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
     {
         try
         {
+            // 位置策略：主窗口每次打开都固定在主屏工作区左侧 1/3 区带的水平居中位置，
+            // 右侧 2/3 留给便签贴纸窗口；不再恢复上次的 Left/Top（用户会话内仍可自由拖动）。
+            // 配置文件只用于恢复用户调整过的窗口尺寸。
+            double width = Width;
+            double height = Height;
+
             if (System.IO.File.Exists(StickyNotes.Infrastructure.AppPaths.WindowConfigPath))
             {
                 var json = System.IO.File.ReadAllText(StickyNotes.Infrastructure.AppPaths.WindowConfigPath);
                 var config = System.Text.Json.JsonSerializer.Deserialize<WindowPlacementData>(json);
                 if (config != null && config.Width >= MinWidth && config.Height >= MinHeight)
                 {
-                    double vLeft = SystemParameters.VirtualScreenLeft;
-                    double vTop = SystemParameters.VirtualScreenTop;
-                    double vRight = vLeft + SystemParameters.VirtualScreenWidth;
-                    double vBottom = vTop + SystemParameters.VirtualScreenHeight;
-
-                    if (config.Left >= vLeft - 20 && config.Left + 50 <= vRight &&
-                        config.Top >= vTop - 20 && config.Top + 50 <= vBottom)
-                    {
-                        WindowStartupLocation = WindowStartupLocation.Manual;
-                        Left = config.Left;
-                        Top = config.Top;
-                        Width = config.Width;
-                        Height = config.Height;
-                    }
+                    width = config.Width;
+                    height = config.Height;
                 }
             }
+
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            ApplyLeftThirdPlacement(width, height);
         }
         catch (Exception ex)
         {
             AppLog.Warn($"[NotesListWindow] 恢复主窗口位置失败: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// 将主窗口放到主屏工作区左侧 1/3 区带的水平居中、垂直居中位置，并钳制在工作区内
+    /// </summary>
+    private void ApplyLeftThirdPlacement(double width, double height)
+    {
+        var work = SystemParameters.WorkArea;
+        double left = work.Left + Math.Max(0, work.Width / 3.0 - width / 2.0);
+        double top = work.Top + Math.Max(10, (work.Height - height) / 2.0);
+
+        if (left + width > work.Right)
+            left = Math.Max(work.Left, work.Right - width - 10);
+        if (top + height > work.Bottom)
+            top = Math.Max(work.Top, work.Bottom - height - 10);
+
+        Left = left;
+        Top = top;
+        Width = width;
+        Height = height;
     }
 
     private void SaveWindowPlacement()

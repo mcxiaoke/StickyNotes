@@ -83,37 +83,49 @@ public sealed class WindowManager
 
         var window = new NoteWindow(vm);
 
-        // 如果坐标属于未初始化的默认值，或者与现有窗口完全重叠，计算主窗口右侧防遮挡错开坐标。
-        // 虚拟桌面坐标允许为负（主屏左侧的副屏是合法位置），不能用 WindowX <= 0 判定未初始化，
-        // 否则左屏便签每次打开都被强制搬回主屏并落库，布局永久丢失（P1-5）
-        bool isDefaultOrUnset = double.IsNaN(note.WindowX) || double.IsNaN(note.WindowY)
-            || (Math.Abs(note.WindowX - Note.DefaultWindowX) < 1 && Math.Abs(note.WindowY - Note.DefaultWindowY) < 1);
-        bool isOverlapping = _activeNoteWindows.Values.Any(w => Math.Abs(w.Left - note.WindowX) < 6 && Math.Abs(w.Top - note.WindowY) < 6);
-
-        if (isDefaultOrUnset || isOverlapping)
+        if (note.AlwaysOnTop)
         {
-            var (newLeft, newTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
-            note.WindowX = newLeft;
-            note.WindowY = newTop;
+            // 桌面置顶便签：记忆并恢复精确坐标。
+            // 如果坐标属于未初始化的默认值，或者与现有窗口完全重叠，计算主窗口右侧防遮挡错开坐标。
+            // 虚拟桌面坐标允许为负（主屏左侧的副屏是合法位置），不能用 WindowX <= 0 判定未初始化，
+            // 否则左屏便签每次打开都被强制搬回主屏并落库，布局永久丢失（P1-5）
+            bool isDefaultOrUnset = double.IsNaN(note.WindowX) || double.IsNaN(note.WindowY)
+                || (Math.Abs(note.WindowX - Note.DefaultWindowX) < 1 && Math.Abs(note.WindowY - Note.DefaultWindowY) < 1);
+            bool isOverlapping = _activeNoteWindows.Values.Any(w => Math.Abs(w.Left - note.WindowX) < 6 && Math.Abs(w.Top - note.WindowY) < 6);
+
+            if (isDefaultOrUnset || isOverlapping)
+            {
+                var (newLeft, newTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
+                note.WindowX = newLeft;
+                note.WindowY = newTop;
+            }
+            else
+            {
+                // 屏幕边界保护（防止拔掉显示器后窗口移出视野）。
+                // 必须用**虚拟桌面**（全部显示器的并集）判断，不能用 SystemParameters.WorkArea ——
+                // 那只是主显示器的工作区，副屏上的便签会被误判越界，在每次启动恢复/重开时
+                // 被强制搬回主屏，丢失用户手工摆放的桌面布局（N-1）。
+                double vLeft = SystemParameters.VirtualScreenLeft;
+                double vTop = SystemParameters.VirtualScreenTop;
+                double vRight = vLeft + SystemParameters.VirtualScreenWidth;
+                double vBottom = vTop + SystemParameters.VirtualScreenHeight;
+
+                if (note.WindowX + 50 > vRight || note.WindowY + 50 > vBottom ||
+                    note.WindowX + note.WindowWidth < vLeft || note.WindowY < vTop)
+                {
+                    var (safeLeft, safeTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
+                    note.WindowX = safeLeft;
+                    note.WindowY = safeTop;
+                }
+            }
         }
         else
         {
-            // 屏幕边界保护（防止拔掉显示器后窗口移出视野）。
-            // 必须用**虚拟桌面**（全部显示器的并集）判断，不能用 SystemParameters.WorkArea ——
-            // 那只是主显示器的工作区，副屏上的便签会被误判越界，在每次启动恢复/重开时
-            // 被强制搬回主屏，丢失用户手工摆放的桌面布局（N-1）。
-            double vLeft = SystemParameters.VirtualScreenLeft;
-            double vTop = SystemParameters.VirtualScreenTop;
-            double vRight = vLeft + SystemParameters.VirtualScreenWidth;
-            double vBottom = vTop + SystemParameters.VirtualScreenHeight;
-
-            if (note.WindowX + 50 > vRight || note.WindowY + 50 > vBottom ||
-                note.WindowX + note.WindowWidth < vLeft || note.WindowY < vTop)
-            {
-                var (safeLeft, safeTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
-                note.WindowX = safeLeft;
-                note.WindowY = safeTop;
-            }
+            // 普通便签：不记忆位置，库里历史坐标一律忽略，
+            // 每次打开都按主窗口右侧防遮挡智能排布（与退出时仅持久化置顶便签坐标的策略呼应）。
+            var (newLeft, newTop) = CalculateSmartRightPlacement(note.WindowWidth, note.WindowHeight);
+            note.WindowX = newLeft;
+            note.WindowY = newTop;
         }
 
         // 应用窗口坐标与尺寸

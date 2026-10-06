@@ -50,7 +50,7 @@ public class LifecycleAndReliabilityTests
     /// 「Shutdown 调用 → 全部窗口 Closed 触发 → Exit/OnExit → 退出持久化」。
     /// 关键点：窗口 Closed 时 IsShuttingDown 仍为 false（原缺陷的触发条件），
     /// 因此必须靠「创建时写 true / 用户主动关闭写 false」的单一写入口来保证退出后 IsOpen 仍为 true。
-    /// 另：仅「桌面置顶」便签记忆精确坐标，其余便签不写坐标。
+    /// 另：仅「桌面置顶」便签记忆精确坐标；普通便签打开时旧坐标被忽略并重新智能排布。
     /// </summary>
     [TestMethod]
     public void P0_1_Shutdown_PreservesIsOpenTrue_AndOnlyPinnedRemembersPlacement()
@@ -129,9 +129,10 @@ public class LifecycleAndReliabilityTests
             Assert.AreEqual(260, afterPinned.WindowX, 1.0, "置顶便签调整后的 X 坐标应被正确持久化");
             Assert.AreEqual(280, afterPinned.WindowY, 1.0, "置顶便签调整后的 Y 坐标应被正确持久化");
 
-            // 普通便签不记忆坐标（仍是原始值，未被退出流程改写）
-            Assert.AreEqual(550, afterPlain.WindowX, 1.0, "非置顶便签不应被记忆坐标");
-            Assert.AreEqual(220, afterPlain.WindowY, 1.0, "非置顶便签不应被记忆坐标");
+            // 普通便签：打开时旧坐标（550,220）已被智能排布重定位，不再被沿用
+            //（新位置策略：仅置顶便签记忆坐标，普通便签每次打开按主窗口右侧智能排布）。
+            Assert.AreNotEqual(550, afterPlain.WindowX, 1.0, "非置顶便签的旧坐标不应被沿用（打开时已重新智能排布）");
+            Assert.AreNotEqual(220, afterPlain.WindowY, 1.0, "非置顶便签的旧坐标不应被沿用（打开时已重新智能排布）");
         });
     }
 
