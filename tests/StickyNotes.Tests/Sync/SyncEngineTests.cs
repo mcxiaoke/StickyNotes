@@ -367,6 +367,116 @@ public class SyncEngineTests
     }
 
     [TestMethod]
+    public async Task PartialDownloadFail_FailedRemoteIdIsNotUploaded()
+    {
+        // P0-1 回归：远端较新但 GET 失败的 id 必须被隔离跳过（既不上传也不下载），
+        // 绝不能被判定为「云端不存在」而把本地旧版本 PUT 上去覆盖云端新数据。
+        // 注：远端仅一个对象且它失败时命中「全部下载失败即中止」闸，故此处
+        // 必须再放一个健康对象构造真正的「部分失败」场景。
+        var repo = CreateRepository(out _);
+        var backend = new FakeStorageBackend();
+        var id = Guid.NewGuid();
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        await repo.SaveAsync(new Note { Id = id, Content = "local-old", UpdatedAt = baseTime });
+        SeedRemote(
+            backend,
+            RemoteNote(id, "cloud-newer", baseTime.AddMinutes(5)),
+            RemoteNote(Guid.NewGuid(), "healthy", DateTime.UtcNow));
+        backend.GetFault = key => key == SyncProtocol.NoteKey(id) ? new HttpRequestException("flaky") : null;
+
+        var summary = Run(repo, backend, DeviceA);
+
+        Assert.AreEqual(1, summary.Downloaded, "健康远端对象照常下行");
+        Assert.AreEqual(0, summary.Uploaded, "读取失败的远端对象本轮不得上传");
+        Assert.AreEqual(1, summary.IncompleteCount, "失败对象应计入未完成对账数");
+        StringAssert.Contains(backend.Objects[SyncProtocol.NoteKey(id)], "cloud-newer", "云端新内容必须原样保留");
+        Assert.AreEqual("local-old", (await repo.GetByIdAsync(id))!.Content, "本地旧版本不受影响，留待下轮重新裁决");
+    }
+
+    [TestMethod]
+    public async Task PartialDownloadFail_OtherLocalNotesStillUpload()
+    {
+        // P0-1 回归：隔离只针对读取失败的 id，其余差量照常上传
+        var repo = CreateRepository(out _);
+        var backend = new FakeStorageBackend();
+        var flakyId = Guid.NewGuid();
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        await repo.SaveAsync(new Note { Id = flakyId, Content = "local-old", UpdatedAt = baseTime });
+        var fresh = NewNote("brand-new-local");
+        await repo.SaveAsync(fresh);
+        SeedRemote(
+            backend,
+            RemoteNote(flakyId, "cloud-newer", baseTime.AddMinutes(5)),
+            RemoteNote(Guid.NewGuid(), "healthy", DateTime.UtcNow));
+        backend.GetFault = key => key == SyncProtocol.NoteKey(flakyId) ? new HttpRequestException("flaky") : null;
+
+        var summary = Run(repo, backend, DeviceA);
+
+        Assert.AreEqual(1, summary.Downloaded, "健康远端对象照常下行");
+        Assert.AreEqual(1, summary.Uploaded, "未被隔离的正常差量照常上传");
+        Assert.IsTrue(backend.PutKeys.Contains(SyncProtocol.NoteKey(fresh.Id)));
+        Assert.IsFalse(backend.PutKeys.Contains(SyncProtocol.NoteKey(flakyId)), "隔离 id 不得出现在上传列表");
+    }
+
+    [TestMethod]
+    public async Task UnreadableRemoteObject_IsNotOverwrittenByLocalUpload()
+    {
+        // P0-1 回归（skippedInvalid 分支）：解析失败的远端对象同样隔离——
+        // 云端可能是未知新格式/暂不可解密，绝不能当「云端没有」而用本地旧版覆盖
+        var repo = CreateRepository(out _);
+        var backend = new FakeStorageBackend();
+        var id = Guid.NewGuid();
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        await repo.SaveAsync(new Note { Id = id, Content = "local-old", UpdatedAt = baseTime });
+        backend.Objects[SyncProtocol.NoteKey(id)] = "{ broken json";
+
+        var summary = Run(repo, backend, DeviceA);
+
+        Assert.AreEqual(1, summary.SkippedInvalid);
+        Assert.AreEqual(1, summary.IncompleteCount);
+        Assert.AreEqual(0, summary.Uploaded);
+        Assert.AreEqual(0, backend.PutCount, "被隔离 id 不得触发任何 PUT");
+    }
+
+    [TestMethod]
+    public async Task PartialUploadFail_ReportsFailedIdsAndKeepsSuccess()
+    {
+        // P2-4 回归：单条上传失败不终止整轮，成功条数与失败 id 如实进摘要
+        var repo = CreateRepository(out _);
+        var backend = new FakeStorageBackend();
+        var ok = NewNote("uploads-fine");
+        var flaky = NewNote("upload-fails");
+        await repo.SaveAsync(ok);
+        await repo.SaveAsync(flaky);
+        backend.PutFault = (key, _) => key == SyncProtocol.NoteKey(flaky.Id)
+            ? new HttpRequestException("503 service unavailable")
+            : null;
+
+        var summary = Run(repo, backend, DeviceA);
+
+        Assert.AreEqual(1, summary.Uploaded);
+        Assert.IsTrue(summary.UploadFailedIds.SequenceEqual(new[] { flaky.Id }), "失败 id 应随摘要返回");
+        Assert.IsTrue(backend.Objects.ContainsKey(SyncProtocol.NoteKey(ok.Id)), "成功的对象已落远端");
+        Assert.IsFalse(backend.Objects.ContainsKey(SyncProtocol.NoteKey(flaky.Id)));
+    }
+
+    [TestMethod]
+    public async Task AllUploadsFail_RoundFails()
+    {
+        // P2-4 边界：全部上传失败仍视为整轮失败（典型为认证/配额），交由 SyncHost 记错误状态
+        var repo = CreateRepository(out _);
+        var backend = new FakeStorageBackend();
+        await repo.SaveAsync(NewNote("doomed"));
+        backend.PutFault = (_, _) => new HttpRequestException("quota exceeded");
+
+        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+            () => new SyncEngine(repo).RunAsync(backend, DeviceA));
+    }
+
+    [TestMethod]
     public async Task SingleFlight_SecondRunIsSkippedNotQueued()
     {
         var repo = CreateRepository(out _);
