@@ -324,9 +324,13 @@ public partial class NotesListWindow : Wpf.Ui.Controls.FluentWindow
                 return;
             }
 
+            // 上传逐条容错（P2-4）：部分失败也返回摘要，明确告知失败条数而非谎报全部成功
+            var uploadFailed = summary.UploadFailedIds.Count;
             ShowInfoBar(
-                $"同步完成 · 下行 {summary.Downloaded} · 上传 {summary.Uploaded} · 守卫跳过 {summary.GuardedSkipped}",
-                InfoBarSeverity.Success);
+                uploadFailed > 0
+                    ? $"同步完成 · 下行 {summary.Downloaded} · 上传 {summary.Uploaded} · 上传失败 {uploadFailed}（下轮自动重试）"
+                    : $"同步完成 · 下行 {summary.Downloaded} · 上传 {summary.Uploaded} · 守卫跳过 {summary.GuardedSkipped}",
+                uploadFailed > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {

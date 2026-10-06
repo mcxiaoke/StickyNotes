@@ -134,17 +134,23 @@ public sealed class SyncHost : IDisposable
 
             if (summary != null)
             {
+                // 上传逐条容错（P2-4）：部分失败不再抛异常，摘要照常返回；
+                // 失败数记入 LastError 供设置页展示，失败的 id 下轮差量对账自动补传
+                var uploadFailed = summary.UploadFailedIds.Count;
                 _stateStore.Update(s =>
                 {
                     s.LastSuccessAt = DateTime.UtcNow;
-                    s.LastError = null;
+                    s.LastError = uploadFailed > 0
+                        ? $"本轮有 {uploadFailed} 条便签上传失败，将在下一轮同步自动重试"
+                        : null;
                     s.LastAttemptAt = DateTime.UtcNow;
                     s.LastUploadedCount = summary.Uploaded;
                     s.LastDownloadedCount = summary.Downloaded;
                     s.LastListedCount = summary.Listed;
                 });
                 AppLog.Info($"[SyncHost] 同步完成({reason}): listed={summary.Listed}, downloaded={summary.Downloaded}, " +
-                            $"uploaded={summary.Uploaded}, skipped={summary.SkippedInvalid}, guarded={summary.GuardedSkipped}");
+                            $"uploaded={summary.Uploaded}, uploadFailed={uploadFailed}, skipped={summary.SkippedInvalid}, " +
+                            $"guarded={summary.GuardedSkipped}, incomplete={summary.IncompleteCount}");
 
                 if (summary.AppliedIds.Count > 0)
                 {

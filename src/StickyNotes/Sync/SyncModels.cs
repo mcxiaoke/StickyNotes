@@ -44,8 +44,16 @@ public sealed record SyncRoundSummary(
     int Uploaded,
     int SkippedInvalid,
     int GuardedSkipped,
-    IReadOnlyList<Guid> AppliedIds)
+    IReadOnlyList<Guid> AppliedIds,
+    int IncompleteCount = 0,
+    IReadOnlyList<Guid>? UploadFailedIds = null)
 {
+    /// <summary>本轮因下载失败/对象无效而被隔离、未参与对账的远端对象数（P0-1）</summary>
+    public int IncompleteCount { get; init; } = IncompleteCount;
+
+    /// <summary>本轮上传失败的便签 id（逐条容错，P2-4）；空列表表示上传全部成功</summary>
+    public IReadOnlyList<Guid> UploadFailedIds { get; init; } = UploadFailedIds ?? Array.Empty<Guid>();
+
     public SyncRoundSummary(int Listed, int Downloaded, int Uploaded, int SkippedInvalid, int GuardedSkipped)
         : this(Listed, Downloaded, Uploaded, SkippedInvalid, GuardedSkipped, Array.Empty<Guid>())
     {

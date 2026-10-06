@@ -195,7 +195,11 @@ public sealed class NoteRepository : INoteRepository
                 WindowWidth = excluded.WindowWidth,
                 WindowHeight = excluded.WindowHeight,
                 IsOpen = excluded.IsOpen,
-                UpdatedAt = excluded.UpdatedAt;
+                UpdatedAt = excluded.UpdatedAt
+            -- 条件守卫（P1-4）：仅当待写入版本比库内新时才覆盖。
+            -- 本方法当前唯一调用方是 JSON 导入：裁决若只靠 Service 层「先读后写」，
+            -- 读与写之间没有事务边界，防抖窗口内的用户编辑会被旧备份静默覆盖。
+            WHERE excluded.UpdatedAt > Notes.UpdatedAt;
             """;
 
         foreach (var note in noteList)
